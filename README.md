@@ -23,7 +23,7 @@
 
 ```bash
 # Клонировать репозиторий
-git clone https://github.com/omi-enjoy/release-helper.git
+git clone https://github.com/ivanov39/release-helper.git
 cd release-helper
 
 # Установить зависимости
@@ -237,4 +237,4 @@ ISC
 
 ## Контакты
 
-При возникновении вопросов или проблем создавайте [issue](https://github.com/omi-enjoy/release-helper/issues).
+При возникновении вопросов или проблем создавайте [issue](https://github.com/ivanov39/release-helper/issues).
