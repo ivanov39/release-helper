@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+.bitbucket.env
+.bitbucket.env.bak
+*.js.map
+.spec/review/release-*.md
+.idea/
+.vscode/
