@@ -7,3 +7,4 @@ dist/
 .spec/review/release-*.md
 .idea/
 .vscode/
+/.claude/
