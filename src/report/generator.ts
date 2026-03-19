@@ -466,7 +466,7 @@ export function generateReport(data: ReleaseReport): string {
   if (missingWarnings.length > 0) {
     add('### Missing Linked Tasks');
     for (const w of missingWarnings) {
-      add(`- **${w.taskId}:** ${w.message}`);
+      add(`- **${issueLink(w.taskId)}:** ${linkifyText(w.message)}`);
     }
     add();
   }
@@ -476,7 +476,7 @@ export function generateReport(data: ReleaseReport): string {
   if (prWarnings.length > 0) {
     add('### PR Issues');
     for (const w of prWarnings) {
-      add(`- **${w.taskId}:** ${w.message}`);
+      add(`- **${issueLink(w.taskId)}:** ${linkifyText(w.message)}`);
     }
     add();
   }
@@ -487,7 +487,7 @@ export function generateReport(data: ReleaseReport): string {
     add('### Composer Updates Required');
     add('The following PRs modify `composer.json`/`composer.lock` — **`composer update` will be needed on servers after deploy:**');
     for (const w of composerWarnings) {
-      add(`- ${w.taskId}: ${w.message}`);
+      add(`- **${issueLink(w.taskId)}:** ${linkifyText(w.message)}`);
     }
     add();
   }
@@ -497,7 +497,7 @@ export function generateReport(data: ReleaseReport): string {
   if (paramsWarnings.length > 0) {
     add('### Parameters Changes');
     for (const w of paramsWarnings) {
-      add(`- **${w.taskId}:** ${w.message}`);
+      add(`- **${issueLink(w.taskId)}:** ${linkifyText(w.message)}`);
     }
     add();
   }
@@ -519,7 +519,7 @@ export function generateReport(data: ReleaseReport): string {
       }
     }
     for (const [, lt] of uniqueMissing) {
-      add(`${recNum}. **Include ${issueLink(lt.linkedTaskId)} in release** — ${lt.linkType} ${issueLink(lt.parentTaskId)}. ${lt.linkedTaskSummary}`);
+      add(`${recNum}. **Include ${issueLink(lt.linkedTaskId)} in release** — ${lt.linkType} ${issueLink(lt.parentTaskId)}. ${linkifyText(lt.linkedTaskSummary)}`);
       recNum++;
     }
     add();
@@ -546,7 +546,7 @@ export function generateReport(data: ReleaseReport): string {
     add('### For PR Issues');
     let recNum = 1;
     for (const w of actionableWarnings) {
-      add(`${recNum}. **${w.taskId}:** ${w.message}`);
+      add(`${recNum}. **${issueLink(w.taskId)}:** ${linkifyText(w.message)}`);
       recNum++;
     }
     add();
