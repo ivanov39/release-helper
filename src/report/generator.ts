@@ -9,6 +9,15 @@ import {
   LinkType,
   Warning,
 } from '../types.js';
+import { YOUTRACK_BASE_URL } from '../config.js';
+
+function issueLink(id: string): string {
+  return `[${id}](${YOUTRACK_BASE_URL}/issue/${id})`;
+}
+
+function linkifyText(text: string): string {
+  return text.replace(/\b(ESN?-\d+)\b/g, (_, id) => issueLink(id));
+}
 
 function stateIcon(state: PRState): string {
   switch (state) {
