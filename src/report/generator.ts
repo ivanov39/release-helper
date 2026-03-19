@@ -218,7 +218,7 @@ function suggestDeployOrder(
       if (!repoSteps.has(repo)) {
         repoSteps.set(repo, { order, prs: [] });
       }
-      const label = `${pr.repoShortName} #${pr.number} (${report.task.id})`;
+      const label = `${pr.repoShortName} #${pr.number} (${issueLink(report.task.id)})`;
       const step = repoSteps.get(repo)!;
       if (!step.prs.includes(label)) {
         step.prs.push(label);
@@ -258,7 +258,7 @@ export function generateReport(data: ReleaseReport): string {
   }
 
   // --- Header ---
-  add(`# Release Check Report: ${release.id}`);
+  add(`# Release Check Report: ${issueLink(release.id)}`);
   add();
   add(`**Release:** ${release.summary}`);
   add(`**URL:** ${release.url}`);
@@ -292,7 +292,7 @@ export function generateReport(data: ReleaseReport): string {
   for (const report of taskReports) {
     for (const pr of report.prs) {
       add(
-        `| ${report.task.id} | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateIcon(pr.state)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
+        `| ${issueLink(report.task.id)} | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateIcon(pr.state)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
       );
     }
     // Linked PRs from description
@@ -302,14 +302,14 @@ export function generateReport(data: ReleaseReport): string {
       );
     }
     if (report.prs.length === 0) {
-      add(`| ${report.task.id} | - | ❌ PR not found | - | - | - | - | - | - | - |`);
+      add(`| ${issueLink(report.task.id)} | - | ❌ PR not found | - | - | - | - | - | - | - |`);
     }
   }
 
   // Missing linked task PRs
   for (const report of missingLinkedTaskReports) {
     const lt = linkedTaskMap.get(report.task.id);
-    const prefix = lt ? `${linkPrefix(lt.linkType)}: ${report.task.id}` : `🔗 ${report.task.id}`;
+    const prefix = lt ? `${linkPrefix(lt.linkType)}: ${issueLink(report.task.id)}` : `🔗 ${issueLink(report.task.id)}`;
     for (const pr of report.prs) {
       add(
         `| ${prefix} | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateIcon(pr.state)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
@@ -333,7 +333,7 @@ export function generateReport(data: ReleaseReport): string {
   add();
 
   for (const report of taskReports) {
-    add(`### ${report.task.id}: ${report.task.summary}`);
+    add(`### ${issueLink(report.task.id)}: ${report.task.summary}`);
     add();
 
     if (report.prs.length === 0) {
@@ -407,8 +407,8 @@ export function generateReport(data: ReleaseReport): string {
 
     for (const report of missingLinkedTaskReports) {
       const lt = linkedTaskMap.get(report.task.id);
-      const linkInfo = lt ? ` (${lt.linkType} ${lt.parentTaskId})` : '';
-      add(`### 🔗 ${report.task.id}: ${report.task.summary}${linkInfo}`);
+      const linkInfo = lt ? ` (${lt.linkType} ${issueLink(lt.parentTaskId)})` : '';
+      add(`### 🔗 ${issueLink(report.task.id)}: ${report.task.summary}${linkInfo}`);
       add();
 
       for (const pr of report.prs) {
@@ -519,7 +519,7 @@ export function generateReport(data: ReleaseReport): string {
       }
     }
     for (const [, lt] of uniqueMissing) {
-      add(`${recNum}. **Include ${lt.linkedTaskId} in release** — ${lt.linkType} ${lt.parentTaskId}. ${lt.linkedTaskSummary}`);
+      add(`${recNum}. **Include ${issueLink(lt.linkedTaskId)} in release** — ${lt.linkType} ${issueLink(lt.parentTaskId)}. ${lt.linkedTaskSummary}`);
       recNum++;
     }
     add();
