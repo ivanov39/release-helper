@@ -45,13 +45,23 @@ function log(msg: string): void {
 
 async function main(): Promise<void> {
   // Step 1: Parse input
-  const input = process.argv[2];
+  const args = process.argv.slice(2);
+  const isShort = args.includes('--short');
+  const isOverview = args.includes('--overview');
+  const input = args.find((a) => !a.startsWith('--'));
+
   if (!input) {
-    console.error('Usage: release-helper <issue-id-or-url>');
+    console.error('Usage: release-helper <issue-id-or-url> [--short] [--overview]');
+    console.error('');
+    console.error('Options:');
+    console.error('  --short     Hide Task Details section from the report');
+    console.error('  --overview  Show only report header and PR Overview table');
     console.error('');
     console.error('Examples:');
     console.error('  release-helper ESN-2274');
-    console.error('  release-helper https://issues.enjoydev.io/issue/ESN-2274');
+    console.error('  release-helper ESN-2274 --short');
+    console.error('  release-helper ESN-2274 --overview');
+    console.error('  release-helper https://issues.enjoydev.io/issue/ESN-2274 --short');
     process.exit(1);
   }
 
@@ -276,7 +286,7 @@ async function main(): Promise<void> {
     checkedAt,
   };
 
-  const reportContent = generateReport(reportData);
+  const reportContent = generateReport(reportData, { short: isShort, overview: isOverview });
 
   // Save report
   const reportDir = path.join(process.cwd(), '.spec', 'review');
