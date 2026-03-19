@@ -8,6 +8,7 @@ import {
   LinkedTask,
   LinkType,
   Warning,
+  ReportOptions,
 } from '../types.js';
 import { YOUTRACK_BASE_URL } from '../config.js';
 
@@ -238,7 +239,7 @@ function suggestDeployOrder(
   return steps;
 }
 
-export function generateReport(data: ReleaseReport): string {
+export function generateReport(data: ReleaseReport, options: ReportOptions = {}): string {
   const {
     release,
     taskReports,
@@ -247,6 +248,9 @@ export function generateReport(data: ReleaseReport): string {
     warnings,
     checkedAt,
   } = data;
+
+  const isShort = options.short ?? false;
+  const isOverview = options.overview ?? false;
 
   const lines: string[] = [];
   const add = (line: string = '') => lines.push(line);
@@ -270,18 +274,20 @@ export function generateReport(data: ReleaseReport): string {
   add();
 
   // --- Summary ---
-  const counts = countStatuses(taskReports, missingUniqueCount);
-  add('## Summary');
-  add();
-  add('| Status | Count |');
-  add('|--------|-------|');
-  add(`| ✅ Ready | ${counts.ready} |`);
-  add(`| ⚠️ Issues | ${counts.issues} |`);
-  add(`| ❌ PR not found | ${counts.noPR} |`);
-  add(`| 🔗 Missing linked tasks | ${counts.missingLinked} |`);
-  add();
-  add('---');
-  add();
+  if (!isOverview) {
+    const counts = countStatuses(taskReports, missingUniqueCount);
+    add('## Summary');
+    add();
+    add('| Status | Count |');
+    add('|--------|-------|');
+    add(`| ✅ Ready | ${counts.ready} |`);
+    add(`| ⚠️ Issues | ${counts.issues} |`);
+    add(`| ❌ PR not found | ${counts.noPR} |`);
+    add(`| 🔗 Missing linked tasks | ${counts.missingLinked} |`);
+    add();
+    add('---');
+    add();
+  }
 
   // --- PR Overview Table ---
   add('## PR Overview');
@@ -329,79 +335,81 @@ export function generateReport(data: ReleaseReport): string {
   add();
 
   // --- Task Details ---
-  add('## Task Details');
-  add();
-
-  for (const report of taskReports) {
-    add(`### ${issueLink(report.task.id)}: ${report.task.summary}`);
+  if (!isShort && !isOverview) {
+    add('## Task Details');
     add();
 
-    if (report.prs.length === 0) {
-      add('**PR:** ❌ Not found');
-      add();
-    }
-
-    for (const pr of report.prs) {
-      add(`**PR:** [${platformTag(pr)} #${pr.number}](${pr.url}) in ${pr.repoShortName} - ${pr.state}`);
-      add(`**Author:** ${pr.author}`);
-      add();
-      add('| Check | Status |');
-      add('|-------|--------|');
-      add(`| Approvals | ${approvalText(pr.approvals)} |`);
-      add(`| Commits | ${commitText(pr.commitCount)} commit${pr.commitCount !== 1 ? 's' : ''} |`);
-      add(`| CI/Checks | ${checksDetailText(pr.checks)} |`);
+    for (const report of taskReports) {
+      add(`### ${issueLink(report.task.id)}: ${report.task.summary}`);
       add();
 
-      const desc = truncateDescription(pr.description);
-      if (desc) {
-        add('**Description:**');
-        add(`> ${desc}`);
+      if (report.prs.length === 0) {
+        add('**PR:** ❌ Not found');
         add();
       }
 
-      // Linked PRs
-      if (report.linkedPrs.length > 0) {
-        add('**Linked PRs:**');
-        for (const lpr of report.linkedPrs) {
-          add(`- [${platformTag(lpr)} #${lpr.number}](${lpr.url}) in ${lpr.repoShortName} - ${lpr.state}`);
+      for (const pr of report.prs) {
+        add(`**PR:** [${platformTag(pr)} #${pr.number}](${pr.url}) in ${pr.repoShortName} - ${pr.state}`);
+        add(`**Author:** ${pr.author}`);
+        add();
+        add('| Check | Status |');
+        add('|-------|--------|');
+        add(`| Approvals | ${approvalText(pr.approvals)} |`);
+        add(`| Commits | ${commitText(pr.commitCount)} commit${pr.commitCount !== 1 ? 's' : ''} |`);
+        add(`| CI/Checks | ${checksDetailText(pr.checks)} |`);
+        add();
+
+        const desc = truncateDescription(pr.description);
+        if (desc) {
+          add('**Description:**');
+          add(`> ${desc}`);
+          add();
+        }
+
+        // Linked PRs
+        if (report.linkedPrs.length > 0) {
+          add('**Linked PRs:**');
+          for (const lpr of report.linkedPrs) {
+            add(`- [${platformTag(lpr)} #${lpr.number}](${lpr.url}) in ${lpr.repoShortName} - ${lpr.state}`);
+          }
+          add();
+        } else {
+          add('**Linked PRs:** None found in description.');
+          add();
+        }
+
+        // Special files
+        add('**Special Files:**');
+        if (pr.specialFiles.composer) {
+          add(`- **Composer:** ⚠️ Changed: \`${pr.specialFiles.composerFiles.join('`, `')}\``);
+        } else {
+          add('- **Composer:** ✅ No changes');
+        }
+        if (pr.specialFiles.params) {
+          add(`- **Params:** ⚠️ Changed: \`${pr.specialFiles.paramsFiles.join('`, `')}\``);
+        } else {
+          add('- **Params:** ✅ No changes');
         }
         add();
-      } else {
-        add('**Linked PRs:** None found in description.');
-        add();
-      }
 
-      // Special files
-      add('**Special Files:**');
-      if (pr.specialFiles.composer) {
-        add(`- **Composer:** ⚠️ Changed: \`${pr.specialFiles.composerFiles.join('`, `')}\``);
-      } else {
-        add('- **Composer:** ✅ No changes');
-      }
-      if (pr.specialFiles.params) {
-        add(`- **Params:** ⚠️ Changed: \`${pr.specialFiles.paramsFiles.join('`, `')}\``);
-      } else {
-        add('- **Params:** ✅ No changes');
-      }
-      add();
-
-      // Deploy notes
-      const deployNotes = detectDeployNotes(pr.description);
-      if (deployNotes.length > 0) {
-        add('**Deploy notes (from PR body):**');
-        for (const note of deployNotes) {
-          add(`> - ${note}`);
+        // Deploy notes
+        const deployNotes = detectDeployNotes(pr.description);
+        if (deployNotes.length > 0) {
+          add('**Deploy notes (from PR body):**');
+          for (const note of deployNotes) {
+            add(`> - ${note}`);
+          }
+          add();
         }
-        add();
       }
-    }
 
-    add('---');
-    add();
+      add('---');
+      add();
+    }
   }
 
   // --- Missing Linked Tasks Details ---
-  if (missingLinkedTaskReports.length > 0) {
+  if (!isShort && !isOverview && missingLinkedTaskReports.length > 0) {
     add('## Missing Linked Tasks Details');
     add();
 
@@ -458,102 +466,106 @@ export function generateReport(data: ReleaseReport): string {
   }
 
   // --- Warnings ---
-  add('## Warnings');
-  add();
-
-  // Missing Linked Tasks warnings
-  const missingWarnings = warnings.filter((w) => w.type === 'missing_linked');
-  if (missingWarnings.length > 0) {
-    add('### Missing Linked Tasks');
-    for (const w of missingWarnings) {
-      add(`- **${issueLink(w.taskId)}:** ${linkifyText(w.message)}`);
-    }
+  if (!isOverview) {
+    add('## Warnings');
     add();
-  }
 
-  // PR Issues warnings
-  const prWarnings = warnings.filter((w) => w.type === 'pr_issue');
-  if (prWarnings.length > 0) {
-    add('### PR Issues');
-    for (const w of prWarnings) {
-      add(`- **${issueLink(w.taskId)}:** ${linkifyText(w.message)}`);
-    }
-    add();
-  }
-
-  // Composer warnings
-  const composerWarnings = warnings.filter((w) => w.type === 'composer');
-  if (composerWarnings.length > 0) {
-    add('### Composer Updates Required');
-    add('The following PRs modify `composer.json`/`composer.lock` — **`composer update` will be needed on servers after deploy:**');
-    for (const w of composerWarnings) {
-      add(`- **${issueLink(w.taskId)}:** ${linkifyText(w.message)}`);
-    }
-    add();
-  }
-
-  // Params warnings
-  const paramsWarnings = warnings.filter((w) => w.type === 'params');
-  if (paramsWarnings.length > 0) {
-    add('### Parameters Changes');
-    for (const w of paramsWarnings) {
-      add(`- **${issueLink(w.taskId)}:** ${linkifyText(w.message)}`);
-    }
-    add();
-  }
-
-  add('---');
-  add();
-
-  // --- Recommendations ---
-  add('## Recommendations');
-  add();
-
-  if (missingLinkedTasks.length > 0) {
-    add('### For Missing Linked Tasks');
-    let recNum = 1;
-    const uniqueMissing = new Map<string, LinkedTask>();
-    for (const lt of missingLinkedTasks) {
-      if (!uniqueMissing.has(lt.linkedTaskId)) {
-        uniqueMissing.set(lt.linkedTaskId, lt);
+    // Missing Linked Tasks warnings
+    const missingWarnings = warnings.filter((w) => w.type === 'missing_linked');
+    if (missingWarnings.length > 0) {
+      add('### Missing Linked Tasks');
+      for (const w of missingWarnings) {
+        add(`- **${issueLink(w.taskId)}:** ${linkifyText(w.message)}`);
       }
+      add();
     }
-    for (const [, lt] of uniqueMissing) {
-      add(`${recNum}. **Include ${issueLink(lt.linkedTaskId)} in release** — ${lt.linkType} ${issueLink(lt.parentTaskId)}. ${linkifyText(lt.linkedTaskSummary)}`);
-      recNum++;
+
+    // PR Issues warnings
+    const prWarnings = warnings.filter((w) => w.type === 'pr_issue');
+    if (prWarnings.length > 0) {
+      add('### PR Issues');
+      for (const w of prWarnings) {
+        add(`- **${issueLink(w.taskId)}:** ${linkifyText(w.message)}`);
+      }
+      add();
     }
+
+    // Composer warnings
+    const composerWarnings = warnings.filter((w) => w.type === 'composer');
+    if (composerWarnings.length > 0) {
+      add('### Composer Updates Required');
+      add('The following PRs modify `composer.json`/`composer.lock` — **`composer update` will be needed on servers after deploy:**');
+      for (const w of composerWarnings) {
+        add(`- **${issueLink(w.taskId)}:** ${linkifyText(w.message)}`);
+      }
+      add();
+    }
+
+    // Params warnings
+    const paramsWarnings = warnings.filter((w) => w.type === 'params');
+    if (paramsWarnings.length > 0) {
+      add('### Parameters Changes');
+      for (const w of paramsWarnings) {
+        add(`- **${issueLink(w.taskId)}:** ${linkifyText(w.message)}`);
+      }
+      add();
+    }
+
+    add('---');
+    add();
+
+    // --- Recommendations ---
+    add('## Recommendations');
+    add();
+
+    if (missingLinkedTasks.length > 0) {
+      add('### For Missing Linked Tasks');
+      let recNum = 1;
+      const uniqueMissing = new Map<string, LinkedTask>();
+      for (const lt of missingLinkedTasks) {
+        if (!uniqueMissing.has(lt.linkedTaskId)) {
+          uniqueMissing.set(lt.linkedTaskId, lt);
+        }
+      }
+      for (const [, lt] of uniqueMissing) {
+        add(`${recNum}. **Include ${issueLink(lt.linkedTaskId)} in release** — ${lt.linkType} ${issueLink(lt.parentTaskId)}. ${linkifyText(lt.linkedTaskSummary)}`);
+        recNum++;
+      }
+      add();
+    }
+
+    // Deploy order
+    const deploySteps = suggestDeployOrder(taskReports, missingLinkedTaskReports);
+    if (deploySteps.length > 0) {
+      add('### Suggested Deploy Order');
+      for (const step of deploySteps) {
+        add(step);
+      }
+      add();
+    }
+
+    // PR issue recommendations
+    const prWarningsForRec = warnings.filter((w) => w.type === 'pr_issue');
+    const actionableWarnings = prWarningsForRec.filter(
+      (w) =>
+        w.message.includes('no approvals') ||
+        w.message.includes('OPEN') ||
+        w.message.includes('failed CI'),
+    );
+    if (actionableWarnings.length > 0) {
+      add('### For PR Issues');
+      let recNum = 1;
+      for (const w of actionableWarnings) {
+        add(`${recNum}. **${issueLink(w.taskId)}:** ${linkifyText(w.message)}`);
+        recNum++;
+      }
+      add();
+    }
+
+    add('---');
     add();
   }
 
-  // Deploy order
-  const deploySteps = suggestDeployOrder(taskReports, missingLinkedTaskReports);
-  if (deploySteps.length > 0) {
-    add('### Suggested Deploy Order');
-    for (const step of deploySteps) {
-      add(step);
-    }
-    add();
-  }
-
-  // PR issue recommendations
-  const actionableWarnings = prWarnings.filter(
-    (w) =>
-      w.message.includes('no approvals') ||
-      w.message.includes('OPEN') ||
-      w.message.includes('failed CI'),
-  );
-  if (actionableWarnings.length > 0) {
-    add('### For PR Issues');
-    let recNum = 1;
-    for (const w of actionableWarnings) {
-      add(`${recNum}. **${issueLink(w.taskId)}:** ${linkifyText(w.message)}`);
-      recNum++;
-    }
-    add();
-  }
-
-  add('---');
-  add();
   add(`*Report generated: ${checkedAt}*`);
   add('*Tool: release-helper v1.0.0*');
   add();

@@ -93,3 +93,8 @@ export interface ReleaseReport {
   warnings: Warning[];
   checkedAt: string;
 }
+
+export interface ReportOptions {
+  short?: boolean;   // hide Task Details section
+  overview?: boolean; // show only header + PR Overview
+}
