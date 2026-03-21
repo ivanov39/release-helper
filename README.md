@@ -10,6 +10,7 @@
 - ✅ Проверка approvals, commits, CI/CD статусов
 - 🔧 Детекция изменений в `composer.json` и `parameters.yml`
 - 📊 Генерация подробного отчёта в Markdown с рекомендациями
+- 💬 Автоматическая публикация отчёта в YouTrack как комментарий к релизной задаче (с обновлением при повторном запуске)
 
 ## Требования
 
@@ -138,21 +139,24 @@ node dist/index.js https://issues.enjoydev.io/issue/ESN-2274 --short
 ```
 🔍 Release Helper - Checking ESN-2274
 
-📋 Step 1/6: Fetching release issue...
+📋 Step 1/7: Fetching release issue...
    Release: Release 3.126.0
-🔗 Step 2/6: Searching linked tasks...
+🔗 Step 2/7: Searching linked tasks...
    Found 11 tasks in release
-🔍 Step 3/6: Analyzing task dependencies...
+🔍 Step 3/7: Analyzing task dependencies...
    Found 3 missing linked tasks
-🔎 Step 4/6: Searching PRs...
+🔎 Step 4/7: Searching PRs...
    Found 14 primary + 4 linked PRs
-📊 Step 5/6: Analyzing PRs...
-📝 Step 6/6: Generating report...
+📊 Step 5/7: Analyzing PRs...
+📝 Step 6/7: Generating report...
 
 ✅ Report saved to .spec/review/release-ESN-2274.md
    Total tasks: 11
    Missing linked: 3
    Warnings: 22
+
+💬 Step 7/7: Publishing report to YouTrack...
+💬 Created YouTrack comment (id: 3-12345)
 ```
 
 **Время работы:** ~3 минуты (зависит от количества задач и репозиториев)
@@ -167,6 +171,15 @@ node dist/index.js https://issues.enjoydev.io/issue/ESN-2274 --short
 4. **Missing Linked Tasks Details** — задачи-зависимости, не включённые в релиз
 5. **Warnings** — проблемы (missing approvals, open PRs, failed CI)
 6. **Recommendations** — рекомендации по включению задач и порядку деплоя
+
+### Публикация в YouTrack
+
+После сохранения файла отчёт автоматически публикуется как комментарий к релизной задаче в YouTrack.
+
+- Комментарий помечается тегом `#release-helper`
+- При повторном запуске существующий комментарий **обновляется** (не создаётся новый)
+- В комментарий включаются все разделы отчёта, **кроме Task Details и Missing Linked Tasks Details** (используется формат `--short`)
+- Ошибка публикации не прерывает работу — файловый отчёт всегда сохраняется
 
 ## Что проверяется
 
@@ -218,7 +231,8 @@ src/
   index.ts                  - CLI entry point, оркестрация
   config.ts                 - конфигурация репозиториев и API
   types.ts                  - TypeScript интерфейсы
-  youtrack/client.ts        - YouTrack REST API клиент
+  youtrack/client.ts        - YouTrack REST API клиент (issue + комментарии)
+  youtrack/comment-publisher.ts - публикация отчёта в YouTrack
   github/client.ts          - GitHub API через gh CLI
   bitbucket/client.ts       - Bitbucket REST API клиент
   analyzer/
