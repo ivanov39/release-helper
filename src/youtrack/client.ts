@@ -36,13 +36,19 @@ export class YouTrackClient {
     this.token = getYouTrackToken();
   }
 
-  private async fetchApi<T>(endpoint: string): Promise<T> {
+  private async fetchApi<T>(
+    endpoint: string,
+    options?: { method?: string; body?: unknown },
+  ): Promise<T> {
     const url = `${YOUTRACK_API_URL}${endpoint}`;
     const response = await fetch(url, {
+      method: options?.method ?? 'GET',
       headers: {
         Authorization: `Bearer ${this.token}`,
         Accept: 'application/json',
+        ...(options?.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       },
+      ...(options?.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
     });
 
     if (!response.ok) {
