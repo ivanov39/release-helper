@@ -29,6 +29,15 @@ interface YTIssueResponse {
   links?: YTLink[];
 }
 
+interface YTComment {
+  id: string;
+  text: string;
+  author: {
+    login: string;
+    name: string;
+  };
+}
+
 export class YouTrackClient {
   private token: string;
 
@@ -124,6 +133,29 @@ export class YouTrackClient {
       description: data.description ?? '',
       linkedIssueCounts: this.buildLinkedIssueCounts(data.links ?? []),
     };
+  }
+
+  async getIssueComments(issueId: string): Promise<YTComment[]> {
+    const fields = 'id,text,author(login,name)';
+    return this.fetchApi<YTComment[]>(
+      `/issues/${encodeURIComponent(issueId)}/comments?fields=${encodeURIComponent(fields)}&$top=-1`,
+    );
+  }
+
+  async addIssueComment(issueId: string, text: string): Promise<YTComment> {
+    const fields = 'id,text,author(login,name)';
+    return this.fetchApi<YTComment>(
+      `/issues/${encodeURIComponent(issueId)}/comments?fields=${encodeURIComponent(fields)}`,
+      { method: 'POST', body: { text } },
+    );
+  }
+
+  async updateIssueComment(issueId: string, commentId: string, text: string): Promise<YTComment> {
+    const fields = 'id,text,author(login,name)';
+    return this.fetchApi<YTComment>(
+      `/issues/${encodeURIComponent(issueId)}/comments/${encodeURIComponent(commentId)}?fields=${encodeURIComponent(fields)}`,
+      { method: 'POST', body: { text } },
+    );
   }
 
   async searchIssues(query: string): Promise<TaskIssue[]> {
