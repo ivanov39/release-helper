@@ -4,12 +4,12 @@ export const YOUTRACK_API_URL = `${YOUTRACK_BASE_URL}/api`;
 export const GITHUB_REPOS = [
   'omi-enjoy/es-next',
   'omi-enjoy/es-application',
+  'omi-enjoy/es-pass',
 ];
 
 export const BITBUCKET_ORG = 'omi-russia';
 
 export const BITBUCKET_REPOS = [
-  'es-pass',
   'es-admin-api-client',
   'es-pass-api-client',
   'es-migrations',
