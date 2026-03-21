@@ -116,6 +116,7 @@ node dist/index.js ES-3310
 |------|----------|
 | `--short` | Скрывает раздел **Task Details** — удобно для быстрого обзора статуса PR |
 | `--overview` | Показывает только заголовок отчёта и таблицу **PR Overview** — минимальный вид |
+| `--no-comment` | Пропускает публикацию отчёта в YouTrack — только локальное сохранение файла |
 
 ```bash
 # Полный отчёт (по умолчанию)
@@ -129,6 +130,12 @@ node dist/index.js ESN-2274 --overview
 
 # Флаги работают с URL
 node dist/index.js https://issues.enjoydev.io/issue/ESN-2274 --short
+
+# Без публикации в YouTrack
+node dist/index.js ESN-2274 --no-comment
+
+# Комбинация флагов
+node dist/index.js ESN-2274 --short --no-comment
 ```
 
 ### Результат
@@ -180,6 +187,7 @@ node dist/index.js https://issues.enjoydev.io/issue/ESN-2274 --short
 - При повторном запуске существующий комментарий **обновляется** (не создаётся новый)
 - В комментарий включаются все разделы отчёта, **кроме Task Details и Missing Linked Tasks Details** (используется формат `--short`)
 - Ошибка публикации не прерывает работу — файловый отчёт всегда сохраняется
+- Для пропуска публикации используйте флаг `--no-comment`
 
 ## Что проверяется
 
