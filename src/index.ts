@@ -49,14 +49,16 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const isShort = args.includes('--short');
   const isOverview = args.includes('--overview');
+  const noComment = args.includes('--no-comment');
   const input = args.find((a) => !a.startsWith('--'));
 
   if (!input) {
-    console.error('Usage: release-helper <issue-id-or-url> [--short] [--overview]');
+    console.error('Usage: release-helper <issue-id-or-url> [--short] [--overview] [--no-comment]');
     console.error('');
     console.error('Options:');
-    console.error('  --short     Hide Task Details section from the report');
-    console.error('  --overview  Show only report header and PR Overview table');
+    console.error('  --short       Hide Task Details section from the report');
+    console.error('  --overview    Show only report header and PR Overview table');
+    console.error('  --no-comment  Skip publishing report as YouTrack comment');
     console.error('');
     console.error('Examples:');
     console.error('  release-helper ESN-2274');
@@ -301,12 +303,16 @@ async function main(): Promise<void> {
   log(`   Warnings: ${warnings.length}`);
 
   // Step 7: Publish report to YouTrack
-  log('\n💬 Step 7/7: Publishing report to YouTrack...');
-  try {
-    await publishReportComment(youtrack, issueId, reportData);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    log(`⚠️  Failed to publish comment to YouTrack: ${message}`);
+  if (noComment) {
+    log('\n⏭️  Step 7/7: Skipping YouTrack comment (--no-comment)');
+  } else {
+    log('\n💬 Step 7/7: Publishing report to YouTrack...');
+    try {
+      await publishReportComment(youtrack, issueId, reportData);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      log(`⚠️  Failed to publish comment to YouTrack: ${message}`);
+    }
   }
 }
 
