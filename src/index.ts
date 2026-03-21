@@ -96,7 +96,7 @@ async function main(): Promise<void> {
   const bitbucket = new BitbucketClient(bbCredentials.email, bbCredentials.token);
 
   // Step 2: Get release issue
-  log('📋 Step 1/6: Fetching release issue...');
+  log('📋 Step 1/7: Fetching release issue...');
   let release: ReleaseIssue;
   try {
     release = await youtrack.getReleaseIssue(issueId);
@@ -108,7 +108,7 @@ async function main(): Promise<void> {
   log(`   Release: ${release.summary}`);
 
   // Step 3: Get linked tasks
-  log('🔗 Step 2/6: Searching linked tasks...');
+  log('🔗 Step 2/7: Searching linked tasks...');
   let linkedIssues: TaskIssue[];
   try {
     linkedIssues = await youtrack.searchIssues(`links: ${issueId}`);
@@ -145,12 +145,12 @@ async function main(): Promise<void> {
   log(`   Found ${filteredTasks.length} tasks in release`);
 
   // Step 3.5: Check task dependencies
-  log('🔍 Step 3/6: Analyzing task dependencies...');
+  log('🔍 Step 3/7: Analyzing task dependencies...');
   const missingLinkedTasks = await analyzeLinkedTasks(youtrack, filteredTasks);
   log(`   Found ${missingLinkedTasks.length} missing linked tasks`);
 
   // Step 4-6: Find PRs for all tasks
-  log('🔎 Step 4/6: Searching PRs...');
+  log('🔎 Step 4/7: Searching PRs...');
   const missingTaskIds = [...new Set(missingLinkedTasks.map((t) => t.linkedTaskId))];
   const allSearchTaskIds = [
     ...filteredTasks.map((t) => t.id),
@@ -159,7 +159,7 @@ async function main(): Promise<void> {
   const prMap = await findPRsForTasks(github, bitbucket, allSearchTaskIds);
 
   // Build task reports
-  log('📊 Step 5/6: Analyzing PRs...');
+  log('📊 Step 5/7: Analyzing PRs...');
   const taskReports: TaskReport[] = [];
   const warnings: Warning[] = [];
 
