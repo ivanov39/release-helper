@@ -31,6 +31,7 @@ import { BitbucketClient } from './bitbucket/client.js';
 import { analyzeLinkedTasks } from './analyzer/linked-tasks.js';
 import { findPRsForTasks } from './analyzer/pr-finder.js';
 import { generateReport } from './report/generator.js';
+import { publishReportComment } from './youtrack/comment-publisher.js';
 import {
   ReleaseIssue,
   TaskIssue,
@@ -274,7 +275,7 @@ async function main(): Promise<void> {
   }
 
   // Step 8: Generate report
-  log('📝 Step 6/6: Generating report...');
+  log('📝 Step 6/7: Generating report...');
   const checkedAt = new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC');
 
   const reportData: ReleaseReport = {
@@ -298,6 +299,15 @@ async function main(): Promise<void> {
   log(`   Total tasks: ${filteredTasks.length}`);
   log(`   Missing linked: ${missingLinkedTasks.length}`);
   log(`   Warnings: ${warnings.length}`);
+
+  // Step 7: Publish report to YouTrack
+  log('\n💬 Step 7/7: Publishing report to YouTrack...');
+  try {
+    await publishReportComment(youtrack, issueId, reportData);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log(`⚠️  Failed to publish comment to YouTrack: ${message}`);
+  }
 }
 
 /** Extract task IDs (ESN-1234, ES-3310) from text */
