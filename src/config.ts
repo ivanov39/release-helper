@@ -1,4 +1,4 @@
-export const YOUTRACK_BASE_URL = 'https://issues.enjoydev.io';
+export const YOUTRACK_BASE_URL = 'https://tm.ertdev.com';
 export const YOUTRACK_API_URL = `${YOUTRACK_BASE_URL}/api`;
 
 export const GITHUB_REPOS = [
@@ -114,7 +114,7 @@ export function getYouTrackToken(): string {
 export function parseIssueId(input: string): string | null {
   if (!input) return null;
 
-  // URL pattern: https://issues.enjoydev.io/issue/ESN-2274 or /issue/ES-3310/release-6-116-0
+  // URL pattern: https://tm.ertdev.com/issue/ESN-2274 or /issue/ES-3310/release-6-116-0
   const urlMatch = input.match(/\/issue\/(ESN?-\d+)/);
   if (urlMatch) return urlMatch[1];
 

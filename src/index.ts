@@ -64,7 +64,7 @@ async function main(): Promise<void> {
     console.error('  release-helper ESN-2274');
     console.error('  release-helper ESN-2274 --short');
     console.error('  release-helper ESN-2274 --overview');
-    console.error('  release-helper https://issues.enjoydev.io/issue/ESN-2274 --short');
+    console.error('  release-helper https://tm.ertdev.com/issue/ESN-2274 --short');
     process.exit(1);
   }
 

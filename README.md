@@ -46,7 +46,7 @@ cp .env.example .env
 
 #### YouTrack Token
 
-1. Перейти в YouTrack: https://issues.enjoydev.io/users/me?tab=authentication
+1. Перейти в YouTrack: https://tm.ertdev.com/users/me?tab=authentication
 2. Нажать **New token...**
 3. Выбрать **Scope**: `YouTrack` (read access)
 4. Скопировать токен и добавить в `.env`:
@@ -84,7 +84,7 @@ gh auth login
 
 ```env
 # YouTrack API Token
-# Получить: https://issues.enjoydev.io/users/me?tab=authentication
+# Получить: https://tm.ertdev.com/users/me?tab=authentication
 YOUTRACK_TOKEN=perm-your-token-here
 
 # GitHub Token (опционально, для rate limits)
@@ -104,7 +104,7 @@ BITBUCKET_TOKEN=ATBB-your-token-here
 node dist/index.js ESN-2274
 
 # Запуск по URL
-node dist/index.js https://issues.enjoydev.io/issue/ESN-2274
+node dist/index.js https://tm.ertdev.com/issue/ESN-2274
 
 # Сокращённый ID
 node dist/index.js ES-3310
@@ -129,7 +129,7 @@ node dist/index.js ESN-2274 --short
 node dist/index.js ESN-2274 --overview
 
 # Флаги работают с URL
-node dist/index.js https://issues.enjoydev.io/issue/ESN-2274 --short
+node dist/index.js https://tm.ertdev.com/issue/ESN-2274 --short
 
 # Без публикации в YouTrack
 node dist/index.js ESN-2274 --no-comment
