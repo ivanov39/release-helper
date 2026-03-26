@@ -292,7 +292,7 @@ export function generateReport(data: ReleaseReport, options: ReportOptions = {})
   // --- PR Overview Table ---
   add('## PR Overview');
   add();
-  add('| Task | Repository | PR | Author | State | Approvals | Commits | Checks | Composer | Params |');
+  add('| Task | Repository | PR | Author | State | Approvals | Commits | Checks | Composer | Inventory |');
   add('|------|------------|-----|--------|-------|-----------|---------|--------|----------|--------|');
 
   for (const report of taskReports) {
@@ -329,7 +329,7 @@ export function generateReport(data: ReleaseReport, options: ReportOptions = {})
   }
 
   add();
-  add('**Legend:** BB = Bitbucket, GH = GitHub | Checks: ✅ passed, ❌ failed, ⏳ pending, - none | Composer/Params: ⚠️ file changed | 🔗 subtask/dep = missing linked task not in release');
+  add('**Legend:** BB = Bitbucket, GH = GitHub | Checks: ✅ passed, ❌ failed, ⏳ pending, - none | Composer/Inventory: ⚠️ file changed | 🔗 subtask/dep = missing linked task not in release');
   add();
   add('---');
   add();
@@ -386,9 +386,9 @@ export function generateReport(data: ReleaseReport, options: ReportOptions = {})
           add('- **Composer:** ✅ No changes');
         }
         if (pr.specialFiles.params) {
-          add(`- **Params:** ⚠️ Changed: \`${pr.specialFiles.paramsFiles.join('`, `')}\``);
+          add(`- **Inventory:** ⚠️ Changed: \`${pr.specialFiles.paramsFiles.join('`, `')}\``);
         } else {
-          add('- **Params:** ✅ No changes');
+          add('- **Inventory:** ✅ No changes');
         }
         add();
 
@@ -453,9 +453,9 @@ export function generateReport(data: ReleaseReport, options: ReportOptions = {})
           add('- **Composer:** ✅ No changes');
         }
         if (pr.specialFiles.params) {
-          add(`- **Params:** ⚠️ Changed: \`${pr.specialFiles.paramsFiles.join('`, `')}\``);
+          add(`- **Inventory:** ⚠️ Changed: \`${pr.specialFiles.paramsFiles.join('`, `')}\``);
         } else {
-          add('- **Params:** ✅ No changes');
+          add('- **Inventory:** ✅ No changes');
         }
         add();
       }
@@ -501,7 +501,7 @@ export function generateReport(data: ReleaseReport, options: ReportOptions = {})
       add();
     }
 
-    // Params warnings
+    // Inventory warnings
     const paramsWarnings = warnings.filter((w) => w.type === 'params');
     if (paramsWarnings.length > 0) {
       add('### Parameters Changes');
