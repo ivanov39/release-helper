@@ -57,8 +57,9 @@ export class YouTrackClient {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15_000);
 
+      let response: Response;
       try {
-        const response = await fetch(url, {
+        response = await fetch(url, {
           method: options?.method ?? 'GET',
           signal: controller.signal,
           headers: {
@@ -68,14 +69,8 @@ export class YouTrackClient {
           },
           ...(options?.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
         });
-
-        if (!response.ok) {
-          const body = await response.text().catch(() => '');
-          throw new Error(`YouTrack API error ${response.status}: ${response.statusText} - ${body}`);
-        }
-
-        return response.json() as Promise<T>;
       } catch (err) {
+        clearTimeout(timeout);
         if (
           attempt < maxRetries &&
           err instanceof Error &&
@@ -85,9 +80,16 @@ export class YouTrackClient {
           continue;
         }
         throw err;
-      } finally {
-        clearTimeout(timeout);
       }
+
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        throw new Error(`YouTrack API error ${response.status}: ${response.statusText} - ${body}`);
+      }
+
+      return response.json() as Promise<T>;
     }
 
     throw new Error(`YouTrack API request failed after ${maxRetries + 1} attempts: ${endpoint}`);
