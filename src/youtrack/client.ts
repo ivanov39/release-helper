@@ -186,7 +186,7 @@ export class YouTrackClient {
   async searchIssues(query: string): Promise<TaskIssue[]> {
     const fields = 'idReadable,summary,customFields(name,value(name))';
     const data = await this.fetchApi<YTIssueResponse[]>(
-      `/issues?query=${encodeURIComponent(query)}&fields=${encodeURIComponent(fields)}&$top=100`,
+      `/issues?query=${encodeURIComponent(query)}&fields=${encodeURIComponent(fields)}&$top=300`,
     );
 
     return data.map((item) => ({
