@@ -112,6 +112,8 @@ export class GitHubClient {
     repo: string,
     taskId: string,
   ): Promise<Array<{ number: number; title: string; branch: string; url: string; state: string }>> {
+    // Use --search for server-side filtering — avoids missing old PRs
+    // that fall outside a fixed --limit window
     const output = runGH([
       'pr',
       'list',
@@ -119,8 +121,10 @@ export class GitHubClient {
       repo,
       '--state',
       'all',
+      '--search',
+      taskId,
       '--limit',
-      '100',
+      '50',
       '--json',
       'number,title,headRefName,url,state',
     ]);

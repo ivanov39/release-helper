@@ -50,22 +50,47 @@ export class YouTrackClient {
     options?: { method?: string; body?: unknown },
   ): Promise<T> {
     const url = `${YOUTRACK_API_URL}${endpoint}`;
-    const response = await fetch(url, {
-      method: options?.method ?? 'GET',
-      headers: {
-        Authorization: `Bearer ${this.token}`,
-        Accept: 'application/json',
-        ...(options?.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-      },
-      ...(options?.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
-    });
+    process.stderr.write(`  → ${options?.method ?? 'GET'} ${url}\n`);
+    const maxRetries = 3;
 
-    if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      throw new Error(`YouTrack API error ${response.status}: ${response.statusText} - ${body}`);
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15_000);
+
+      try {
+        const response = await fetch(url, {
+          method: options?.method ?? 'GET',
+          signal: controller.signal,
+          headers: {
+            Authorization: `Bearer ${this.token}`,
+            Accept: 'application/json',
+            ...(options?.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+          },
+          ...(options?.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
+        });
+
+        if (!response.ok) {
+          const body = await response.text().catch(() => '');
+          throw new Error(`YouTrack API error ${response.status}: ${response.statusText} - ${body}`);
+        }
+
+        return response.json() as Promise<T>;
+      } catch (err) {
+        if (
+          attempt < maxRetries &&
+          err instanceof Error &&
+          (err.name === 'AbortError' || err.message === 'fetch failed' || err.message === 'terminated')
+        ) {
+          process.stderr.write(`    Retry ${attempt + 1}/${maxRetries} for ${endpoint}...\n`);
+          continue;
+        }
+        throw err;
+      } finally {
+        clearTimeout(timeout);
+      }
     }
 
-    return response.json() as Promise<T>;
+    throw new Error(`YouTrack API request failed after ${maxRetries + 1} attempts: ${endpoint}`);
   }
 
   private getCustomFieldValue(fields: YTCustomField[], fieldName: string): string {
