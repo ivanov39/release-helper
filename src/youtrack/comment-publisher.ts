@@ -13,7 +13,7 @@ export async function publishReportComment(
   const commentText = `${COMMENT_TAG}\n\n${reportContent}`;
 
   const comments = await youtrack.getIssueComments(issueId);
-  const existing = comments.find((c) => c.text.includes(COMMENT_TAG));
+  const existing = comments.find((c) => c.text?.includes(COMMENT_TAG));
 
   if (existing) {
     await youtrack.updateIssueComment(issueId, existing.id, commentText);
