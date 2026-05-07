@@ -100,46 +100,70 @@ export class BitbucketClient {
 
   private async fetchApi<T>(endpoint: string): Promise<T> {
     const url = `${BITBUCKET_API_URL}${endpoint}`;
-    const response = await fetch(url, {
-      headers: {
-        Authorization: this.authHeader,
-        Accept: 'application/json',
-      },
-    });
+    const maxAttempts = 3;
+    let lastErr: unknown;
 
-    if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      throw new Error(`Bitbucket API error ${response.status}: ${response.statusText} - ${body}`);
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15_000);
+      try {
+        const response = await fetch(url, {
+          signal: controller.signal,
+          headers: { Authorization: this.authHeader, Accept: 'application/json' },
+        });
+        clearTimeout(timer);
+
+        if (response.status >= 500 && response.status < 600 && attempt < maxAttempts) {
+          lastErr = new Error(`Bitbucket API ${response.status} ${response.statusText}`);
+          await new Promise((r) => setTimeout(r, 500 * attempt));
+          continue;
+        }
+
+        if (!response.ok) {
+          const body = await response.text().catch(() => '');
+          throw new Error(`Bitbucket API error ${response.status}: ${response.statusText} - ${body}`);
+        }
+
+        return (await response.json()) as T;
+      } catch (err) {
+        clearTimeout(timer);
+        lastErr = err;
+        const isTransient =
+          err instanceof Error &&
+          (err.name === 'AbortError' ||
+            err.message === 'fetch failed' ||
+            err.message === 'terminated');
+        if (!isTransient || attempt === maxAttempts) throw err;
+        process.stderr.write(
+          `    Warning: BB ${endpoint} failed (attempt ${attempt}/${maxAttempts}), retrying...\n`,
+        );
+        await new Promise((r) => setTimeout(r, 500 * attempt));
+      }
     }
 
-    return response.json() as Promise<T>;
+    throw new Error(`Bitbucket request ${endpoint} failed after ${maxAttempts} attempts: ${lastErr}`);
   }
 
   async searchPRs(
     repo: string,
     taskId: string,
   ): Promise<Array<{ id: number; title: string; state: string }>> {
-    try {
-      const data = await this.fetchApi<BBPRResponse>(
-        `/repositories/${BITBUCKET_ORG}/${repo}/pullrequests?state=ALL&pagelen=50`,
-      );
+    const data = await this.fetchApi<BBPRResponse>(
+      `/repositories/${BITBUCKET_ORG}/${repo}/pullrequests?state=ALL&pagelen=50`,
+    );
 
-      const pattern = taskId.toLowerCase();
-      return (data.values ?? [])
-        .filter(
-          (pr) =>
-            pr.source.branch.name.toLowerCase().includes(pattern) ||
-            pr.title.toLowerCase().includes(pattern),
-        )
-        .map((pr) => ({
-          id: pr.id,
-          title: pr.title,
-          state: pr.state,
-        }));
-    } catch (err) {
-      process.stderr.write(`    Warning: BB search failed for ${repo}: ${err}\n`);
-      return [];
-    }
+    const pattern = taskId.toLowerCase();
+    return (data.values ?? [])
+      .filter(
+        (pr) =>
+          pr.source.branch.name.toLowerCase().includes(pattern) ||
+          pr.title.toLowerCase().includes(pattern),
+      )
+      .map((pr) => ({
+        id: pr.id,
+        title: pr.title,
+        state: pr.state,
+      }));
   }
 
   async getPRDetails(repo: string, prId: number): Promise<PullRequest> {

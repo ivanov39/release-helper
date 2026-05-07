@@ -31,17 +31,35 @@ interface GHPRDetails {
   files: Array<{ path: string }>;
 }
 
-function runGH(args: string[]): string | null {
-  try {
-    return execFileSync('gh', args, {
-      encoding: 'utf-8',
-      timeout: 30000,
-      maxBuffer: 10 * 1024 * 1024,
-    });
-  } catch (err) {
-    process.stderr.write(`    Warning: gh ${args.slice(0, 3).join(' ')} failed: ${err}\n`);
-    return null;
+const GH_MAX_ATTEMPTS = 3;
+export { GH_MAX_ATTEMPTS };
+
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function runGH(args: string[]): string {
+  const label = `gh ${args.slice(0, 3).join(' ')}`;
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= GH_MAX_ATTEMPTS; attempt++) {
+    try {
+      return execFileSync('gh', args, {
+        encoding: 'utf-8',
+        timeout: 30000,
+        maxBuffer: 10 * 1024 * 1024,
+      });
+    } catch (err) {
+      lastErr = err;
+      if (attempt < GH_MAX_ATTEMPTS) {
+        process.stderr.write(
+          `    Warning: ${label} failed (attempt ${attempt}/${GH_MAX_ATTEMPTS}), retrying...\n`,
+        );
+        sleepSync(500 * attempt);
+      }
+    }
   }
+  const summary = lastErr instanceof Error ? lastErr.message.split('\n')[0] : String(lastErr);
+  throw new Error(`${label} failed after ${GH_MAX_ATTEMPTS} attempts: ${summary}`);
 }
 
 function mapGHState(state: string): PRState {
@@ -129,8 +147,6 @@ export class GitHubClient {
       'number,title,headRefName,url,state',
     ]);
 
-    if (!output) return [];
-
     let items: GHPRListItem[];
     try {
       items = JSON.parse(output);
@@ -164,10 +180,6 @@ export class GitHubClient {
       '--json',
       'number,title,body,state,url,author,reviews,commits,comments,statusCheckRollup,files',
     ]);
-
-    if (!output) {
-      throw new Error(`Could not fetch PR #${prNumber} from ${repo}`);
-    }
 
     const data: GHPRDetails = JSON.parse(output);
 
@@ -222,16 +234,13 @@ export class GitHubClient {
   }
 
   async getCollaborators(repo: string): Promise<string[]> {
-    const output = runGH([
-      'api',
-      `repos/${repo}/collaborators`,
-      '--jq',
-      '[.[] | select(.permissions.push == true) | .login]',
-    ]);
-
-    if (!output) return [];
-
     try {
+      const output = runGH([
+        'api',
+        `repos/${repo}/collaborators`,
+        '--jq',
+        '[.[] | select(.permissions.push == true) | .login]',
+      ]);
       return JSON.parse(output);
     } catch {
       return [];

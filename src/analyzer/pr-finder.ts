@@ -1,4 +1,4 @@
-import { PullRequest } from '../types.js';
+import { PullRequest, SearchError } from '../types.js';
 import { GitHubClient } from '../github/client.js';
 import { BitbucketClient } from '../bitbucket/client.js';
 import { GITHUB_REPOS, BITBUCKET_REPOS } from '../config.js';
@@ -67,17 +67,25 @@ async function runWithConcurrency<T>(
   return results;
 }
 
-/** Search a single Bitbucket repo for a task ID, return found PR matches */
+/** Search a single Bitbucket repo for a task ID, return found PR matches and any error */
 async function searchBBRepo(
   bitbucket: BitbucketClient,
   repo: string,
   taskId: string,
-): Promise<Array<{ repo: string; id: number; title: string; state: string }>> {
+): Promise<{
+  repo: string;
+  matches: Array<{ repo: string; id: number; title: string; state: string }>;
+  error: string | null;
+}> {
   try {
     const matches = await bitbucket.searchPRs(repo, taskId);
-    return matches.map((m) => ({ repo, ...m }));
-  } catch {
-    return [];
+    return { repo, matches: matches.map((m) => ({ repo, ...m })), error: null };
+  } catch (err) {
+    return {
+      repo,
+      matches: [],
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
@@ -86,14 +94,18 @@ export async function findPRsForTasks(
   github: GitHubClient,
   bitbucket: BitbucketClient,
   taskIds: string[],
-): Promise<Map<string, { primary: PullRequest[]; linked: PullRequest[] }>> {
-  const results = new Map<string, { primary: PullRequest[]; linked: PullRequest[] }>();
+): Promise<Map<string, { primary: PullRequest[]; linked: PullRequest[]; searchErrors: SearchError[] }>> {
+  const results = new Map<
+    string,
+    { primary: PullRequest[]; linked: PullRequest[]; searchErrors: SearchError[] }
+  >();
   const prCache = new Map<string, PullRequest>();
 
   for (const taskId of taskIds) {
     process.stderr.write(`  Searching PRs for ${taskId}...\n`);
     const primaryPrs: PullRequest[] = [];
     const linkedPrs: PullRequest[] = [];
+    const searchErrors: SearchError[] = [];
 
     // Search GitHub repos (sequential — only 2 repos, gh CLI is fast)
     for (const repo of GITHUB_REPOS) {
@@ -109,7 +121,9 @@ export async function findPRsForTasks(
           primaryPrs.push(pr);
         }
       } catch (err) {
-        process.stderr.write(`    Warning: GitHub search failed for ${repo}: ${err}\n`);
+        const message = err instanceof Error ? err.message : String(err);
+        searchErrors.push({ platform: 'github', repo, message });
+        process.stderr.write(`    ❌ GitHub fetch failed for ${repo}/${taskId}: ${message}\n`);
       }
     }
 
@@ -118,7 +132,17 @@ export async function findPRsForTasks(
       (repo) => () => searchBBRepo(bitbucket, repo, taskId),
     );
     const bbResults = await runWithConcurrency(bbSearchTasks, BB_CONCURRENCY);
-    const bbMatches = bbResults.flat();
+
+    const bbMatches: Array<{ repo: string; id: number; title: string; state: string }> = [];
+    for (const r of bbResults) {
+      if (r.error) {
+        searchErrors.push({ platform: 'bitbucket', repo: r.repo, message: r.error });
+        process.stderr.write(
+          `    ❌ Bitbucket fetch failed for ${r.repo}/${taskId}: ${r.error}\n`,
+        );
+      }
+      bbMatches.push(...r.matches);
+    }
 
     // Fetch details for matched BB PRs (also parallel)
     const bbDetailTasks = bbMatches.map(
@@ -206,9 +230,10 @@ export async function findPRsForTasks(
       return true;
     });
 
-    results.set(taskId, { primary: filteredPrimary, linked: dedupedLinked });
+    results.set(taskId, { primary: filteredPrimary, linked: dedupedLinked, searchErrors });
+    const errorSuffix = searchErrors.length > 0 ? ` (${searchErrors.length} repo error(s))` : '';
     process.stderr.write(
-      `    Found ${filteredPrimary.length} primary + ${dedupedLinked.length} linked PRs\n`,
+      `    Found ${filteredPrimary.length} primary + ${dedupedLinked.length} linked PRs${errorSuffix}\n`,
     );
   }
 

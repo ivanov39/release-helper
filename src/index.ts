@@ -25,6 +25,7 @@ import {
   parseIssueId,
   loadBitbucketCredentials,
 } from './config.js';
+import { GH_MAX_ATTEMPTS } from './github/client.js';
 import { YouTrackClient } from './youtrack/client.js';
 import { GitHubClient } from './github/client.js';
 import { BitbucketClient } from './bitbucket/client.js';
@@ -166,16 +167,25 @@ async function main(): Promise<void> {
   const warnings: Warning[] = [];
 
   for (const task of filteredTasks) {
-    const prData = prMap.get(task.id) ?? { primary: [], linked: [] };
+    const prData = prMap.get(task.id) ?? { primary: [], linked: [], searchErrors: [] };
     const report: TaskReport = {
       task,
       prs: prData.primary,
       linkedPrs: prData.linked,
+      searchErrors: prData.searchErrors.length > 0 ? prData.searchErrors : undefined,
     };
     taskReports.push(report);
 
+    for (const err of prData.searchErrors) {
+      warnings.push({
+        type: 'search_failed',
+        taskId: task.id,
+        message: `Search failed for ${err.repo} (${err.platform}) after ${GH_MAX_ATTEMPTS} attempts — see Task Details for error info`,
+      });
+    }
+
     // Generate warnings
-    if (prData.primary.length === 0) {
+    if (prData.primary.length === 0 && prData.searchErrors.length === 0) {
       warnings.push({
         type: 'pr_issue',
         taskId: task.id,
@@ -248,12 +258,21 @@ async function main(): Promise<void> {
       };
     }
 
-    const prData = prMap.get(missing.linkedTaskId) ?? { primary: [], linked: [] };
+    const prData = prMap.get(missing.linkedTaskId) ?? { primary: [], linked: [], searchErrors: [] };
     missingLinkedTaskReports.push({
       task: missingTask,
       prs: prData.primary,
       linkedPrs: prData.linked,
+      searchErrors: prData.searchErrors.length > 0 ? prData.searchErrors : undefined,
     });
+
+    for (const err of prData.searchErrors) {
+      warnings.push({
+        type: 'search_failed',
+        taskId: missing.linkedTaskId,
+        message: `Search failed for ${err.repo} (${err.platform}) after ${GH_MAX_ATTEMPTS} attempts — see Task Details for error info`,
+      });
+    }
 
     // Warnings for missing linked task PRs
     for (const pr of prData.primary) {
@@ -301,6 +320,15 @@ async function main(): Promise<void> {
   log(`   Total tasks: ${filteredTasks.length}`);
   log(`   Missing linked: ${missingLinkedTasks.length}`);
   log(`   Warnings: ${warnings.length}`);
+
+  const totalSearchErrors =
+    taskReports.reduce((s, r) => s + (r.searchErrors?.length ?? 0), 0) +
+    missingLinkedTaskReports.reduce((s, r) => s + (r.searchErrors?.length ?? 0), 0);
+  if (totalSearchErrors > 0) {
+    log(
+      `   ⚠️  PR search failed for ${totalSearchErrors} (task, repo) pair(s) — see "Search Failures" section in the report`,
+    );
+  }
 
   // Step 7: Publish report to YouTrack
   if (noComment) {

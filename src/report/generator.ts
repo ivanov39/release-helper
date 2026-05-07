@@ -172,22 +172,26 @@ function isTaskReady(report: TaskReport): boolean {
 function countStatuses(
   taskReports: TaskReport[],
   missingCount: number,
-): { ready: number; issues: number; noPR: number; missingLinked: number } {
+): { ready: number; issues: number; noPR: number; searchFailed: number; missingLinked: number } {
   let ready = 0;
   let issues = 0;
   let noPR = 0;
+  let searchFailed = 0;
 
   for (const report of taskReports) {
-    if (report.prs.length === 0) {
+    if ((report.searchErrors?.length ?? 0) > 0) {
+      searchFailed++;
+    }
+    if (report.prs.length === 0 && (report.searchErrors?.length ?? 0) === 0) {
       noPR++;
-    } else if (isTaskReady(report)) {
+    } else if (report.prs.length > 0 && isTaskReady(report)) {
       ready++;
-    } else {
+    } else if (report.prs.length > 0) {
       issues++;
     }
   }
 
-  return { ready, issues, noPR, missingLinked: missingCount };
+  return { ready, issues, noPR, searchFailed, missingLinked: missingCount };
 }
 
 /** Suggest deploy order based on repo types */
@@ -283,6 +287,7 @@ export function generateReport(data: ReleaseReport, options: ReportOptions = {})
     add(`| ✅ Ready | ${counts.ready} |`);
     add(`| ⚠️ Issues | ${counts.issues} |`);
     add(`| ❌ PR not found | ${counts.noPR} |`);
+    add(`| 🌐 Search failed | ${counts.searchFailed} |`);
     add(`| 🔗 Missing linked tasks | ${counts.missingLinked} |`);
     add();
     add('---');
@@ -308,7 +313,14 @@ export function generateReport(data: ReleaseReport, options: ReportOptions = {})
       );
     }
     if (report.prs.length === 0) {
-      add(`| ${issueLink(report.task.id)} | - | ❌ PR not found | - | - | - | - | - | - | - |`);
+      if ((report.searchErrors?.length ?? 0) > 0) {
+        const repos = report.searchErrors!
+          .map((e) => `${e.repo} (${e.platform === 'github' ? 'GH' : 'BB'})`)
+          .join(', ');
+        add(`| ${issueLink(report.task.id)} | ${repos} | 🌐 PR search failed | - | - | - | - | - | - | - |`);
+      } else {
+        add(`| ${issueLink(report.task.id)} | - | ❌ PR not found | - | - | - | - | - | - | - |`);
+      }
     }
   }
 
@@ -325,6 +337,14 @@ export function generateReport(data: ReleaseReport, options: ReportOptions = {})
       add(
         `| └─ linked | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateIcon(pr.state)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
       );
+    }
+    if (report.prs.length === 0) {
+      if ((report.searchErrors?.length ?? 0) > 0) {
+        const repos = report.searchErrors!
+          .map((e) => `${e.repo} (${e.platform === 'github' ? 'GH' : 'BB'})`)
+          .join(', ');
+        add(`| ${prefix} | ${repos} | 🌐 PR search failed | - | - | - | - | - | - | - |`);
+      }
     }
   }
 
@@ -344,8 +364,19 @@ export function generateReport(data: ReleaseReport, options: ReportOptions = {})
       add();
 
       if (report.prs.length === 0) {
-        add('**PR:** ❌ Not found');
-        add();
+        if ((report.searchErrors?.length ?? 0) > 0) {
+          add('**PR:** 🌐 Search failed (max retries exceeded) — PR may exist but could not be confirmed.');
+          add();
+          add('| Repository | Platform | Error |');
+          add('|------------|----------|-------|');
+          for (const err of report.searchErrors!) {
+            add(`| ${err.repo} | ${err.platform === 'github' ? 'GH' : 'BB'} | ${err.message} |`);
+          }
+          add();
+        } else {
+          add('**PR:** ❌ Not found');
+          add();
+        }
       }
 
       for (const pr of report.prs) {
@@ -475,6 +506,17 @@ export function generateReport(data: ReleaseReport, options: ReportOptions = {})
     if (missingWarnings.length > 0) {
       add('### Missing Linked Tasks');
       for (const w of missingWarnings) {
+        add(`- **${issueLink(w.taskId)}:** ${linkifyText(w.message)}`);
+      }
+      add();
+    }
+
+    // Search Failures warnings
+    const searchWarnings = warnings.filter((w) => w.type === 'search_failed');
+    if (searchWarnings.length > 0) {
+      add('### Search Failures');
+      add('PR search exceeded the retry limit for these (task, repo) pairs. PRs may exist but were not confirmed — rerun the tool when the platform is healthy.');
+      for (const w of searchWarnings) {
         add(`- **${issueLink(w.taskId)}:** ${linkifyText(w.message)}`);
       }
       add();

@@ -73,14 +73,21 @@ export interface PullRequest {
   isLinked: boolean;
 }
 
+export interface SearchError {
+  platform: Platform;
+  repo: string;
+  message: string;
+}
+
 export interface TaskReport {
   task: TaskIssue;
   prs: PullRequest[];
   linkedPrs: PullRequest[];
+  searchErrors?: SearchError[];
 }
 
 export interface Warning {
-  type: 'missing_linked' | 'pr_issue' | 'composer' | 'params';
+  type: 'missing_linked' | 'pr_issue' | 'composer' | 'params' | 'search_failed';
   taskId: string;
   message: string;
 }
