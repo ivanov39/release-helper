@@ -54,6 +54,32 @@ export interface SpecialFiles {
   paramsFiles: string[];
 }
 
+/** GitHub `mergeable` field — whether the PR has conflicts */
+export type MergeableState = 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN';
+
+/** GitHub `mergeStateStatus` field — overall merge readiness */
+export type MergeStateStatus =
+  | 'CLEAN'
+  | 'BLOCKED'
+  | 'BEHIND'
+  | 'DIRTY'
+  | 'UNSTABLE'
+  | 'DRAFT'
+  | 'HAS_HOOKS'
+  | 'UNKNOWN';
+
+/** Whether a PR is allowed to be merged, with human-readable reasons if not */
+export interface MergeStatus {
+  mergeable: MergeableState;
+  mergeStateStatus: MergeStateStatus;
+  /** Derived: true only when GitHub reports the PR is cleanly mergeable */
+  canMerge: boolean;
+  /** Reasons the PR cannot be merged (empty when canMerge is true) */
+  reasons: string[];
+  /** Unresolved review threads (from GraphQL); undefined when not queried */
+  unresolvedThreads?: number;
+}
+
 export interface PullRequest {
   platform: Platform;
   repo: string;
@@ -71,6 +97,8 @@ export interface PullRequest {
   description: string;
   linkedPRUrls: string[];
   isLinked: boolean;
+  /** GitHub merge readiness; undefined for non-OPEN PRs and Bitbucket (not queried) */
+  mergeStatus?: MergeStatus;
 }
 
 export interface SearchError {

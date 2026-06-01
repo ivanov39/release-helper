@@ -6,6 +6,9 @@ import {
   CheckState,
   PRState,
   SpecialFiles,
+  MergeableState,
+  MergeStateStatus,
+  MergeStatus,
 } from '../types.js';
 import { REPO_SHORT_NAMES, COMPOSER_PATTERNS, PARAMS_PATTERNS } from '../config.js';
 
@@ -125,6 +128,100 @@ function extractLinkedPRUrls(text: string): string[] {
   return [...new Set(urls)];
 }
 
+function normalizeMergeable(value: string | null | undefined): MergeableState {
+  switch ((value ?? '').toUpperCase()) {
+    case 'MERGEABLE':
+      return 'MERGEABLE';
+    case 'CONFLICTING':
+      return 'CONFLICTING';
+    default:
+      return 'UNKNOWN';
+  }
+}
+
+function normalizeMergeState(value: string | null | undefined): MergeStateStatus {
+  switch ((value ?? '').toUpperCase()) {
+    case 'CLEAN':
+      return 'CLEAN';
+    case 'BLOCKED':
+      return 'BLOCKED';
+    case 'BEHIND':
+      return 'BEHIND';
+    case 'DIRTY':
+      return 'DIRTY';
+    case 'UNSTABLE':
+      return 'UNSTABLE';
+    case 'DRAFT':
+      return 'DRAFT';
+    case 'HAS_HOOKS':
+      return 'HAS_HOOKS';
+    default:
+      return 'UNKNOWN';
+  }
+}
+
+/** Derive can-merge verdict and human-readable reasons from GitHub merge fields */
+function buildMergeStatus(
+  raw: { mergeable: string; mergeStateStatus: string },
+  approvals: Approval[],
+  checks: CheckStatus[],
+  unresolvedThreads: number | undefined,
+): MergeStatus {
+  const mergeable = normalizeMergeable(raw.mergeable);
+  const mergeStateStatus = normalizeMergeState(raw.mergeStateStatus);
+  const canMerge = mergeStateStatus === 'CLEAN';
+
+  const reasons: string[] = [];
+  if (!canMerge) {
+    // Specifics inferred from already-fetched review/CI data
+    const specifics: string[] = [];
+    if (mergeable === 'CONFLICTING') specifics.push('конфликты с базовой веткой');
+    if (approvals.length === 0) specifics.push('нет апрувов');
+    if (checks.some((c) => c.state === 'FAILURE')) specifics.push('падают CI-проверки');
+    else if (checks.some((c) => c.state === 'PENDING')) specifics.push('CI-проверки ещё идут');
+    if (typeof unresolvedThreads === 'number' && unresolvedThreads > 0) {
+      specifics.push(`${unresolvedThreads} нерешённых обсуждений (review threads)`);
+    }
+
+    switch (mergeStateStatus) {
+      case 'BLOCKED':
+        if (specifics.length > 0) reasons.push(...specifics);
+        else reasons.push('заблокирован защитой ветки (нерешённые обсуждения или непройденные проверки)');
+        break;
+      case 'BEHIND':
+        reasons.push('ветка отстаёт от базовой — нужно обновить (merge/rebase базовой ветки)');
+        reasons.push(...specifics);
+        break;
+      case 'DIRTY':
+        reasons.push('конфликты слияния — требуется ручное разрешение');
+        break;
+      case 'UNSTABLE':
+        reasons.push('необязательные проверки падают или ещё идут');
+        reasons.push(...specifics);
+        break;
+      case 'DRAFT':
+        reasons.push('PR в статусе черновика (Draft)');
+        break;
+      case 'HAS_HOOKS':
+        reasons.push('блокируется pre-receive хуками репозитория');
+        break;
+      case 'UNKNOWN':
+        reasons.push('GitHub ещё не рассчитал состояние слияния (UNKNOWN)');
+        break;
+      default:
+        reasons.push(...specifics);
+    }
+  }
+
+  return {
+    mergeable,
+    mergeStateStatus,
+    canMerge,
+    reasons: [...new Set(reasons)],
+    unresolvedThreads,
+  };
+}
+
 export class GitHubClient {
   async searchPRs(
     repo: string,
@@ -213,6 +310,20 @@ export class GitHubClient {
 
     const repoShortName = REPO_SHORT_NAMES[repo] ?? repo.split('/').pop() ?? repo;
 
+    const state = mapGHState(data.state);
+
+    // Merge readiness is only meaningful for OPEN PRs (others are settled).
+    let mergeStatus: MergeStatus | undefined;
+    if (state === 'OPEN') {
+      const raw = this.getMergeRaw(repo, data.number);
+      // Unresolved review threads only matter when not already cleanly mergeable.
+      const unresolvedThreads =
+        raw.mergeStateStatus.toUpperCase() === 'CLEAN'
+          ? undefined
+          : this.getUnresolvedThreadCount(repo, data.number);
+      mergeStatus = buildMergeStatus(raw, approvals, checks, unresolvedThreads);
+    }
+
     return {
       platform: 'github',
       repo,
@@ -221,7 +332,7 @@ export class GitHubClient {
       title: data.title,
       url: data.url,
       author: data.author.login,
-      state: mapGHState(data.state),
+      state,
       approvals,
       commitCount: (data.commits ?? []).length,
       checks,
@@ -230,7 +341,70 @@ export class GitHubClient {
       description: data.body ?? '',
       linkedPRUrls: [...new Set(linkedPRUrls)],
       isLinked: false,
+      mergeStatus,
     };
+  }
+
+  /**
+   * Fetch `mergeable` + `mergeStateStatus` for a PR. GitHub computes these
+   * asynchronously, so retry while `mergeStateStatus` is UNKNOWN (per gh docs).
+   */
+  getMergeRaw(repo: string, prNumber: number): { mergeable: string; mergeStateStatus: string } {
+    for (let attempt = 1; attempt <= GH_MAX_ATTEMPTS; attempt++) {
+      const output = runGH([
+        'pr',
+        'view',
+        String(prNumber),
+        '-R',
+        repo,
+        '--json',
+        'mergeable,mergeStateStatus',
+      ]);
+      let data: { mergeable?: string; mergeStateStatus?: string };
+      try {
+        data = JSON.parse(output);
+      } catch {
+        return { mergeable: 'UNKNOWN', mergeStateStatus: 'UNKNOWN' };
+      }
+      const mergeable = data.mergeable ?? 'UNKNOWN';
+      const mergeStateStatus = data.mergeStateStatus ?? 'UNKNOWN';
+      if (mergeStateStatus.toUpperCase() !== 'UNKNOWN' || attempt === GH_MAX_ATTEMPTS) {
+        return { mergeable, mergeStateStatus };
+      }
+      // Give GitHub a moment to finish recomputing, then retry.
+      sleepSync(2000);
+    }
+    return { mergeable: 'UNKNOWN', mergeStateStatus: 'UNKNOWN' };
+  }
+
+  /**
+   * Count unresolved review threads via GraphQL (the REST/`gh pr view --json`
+   * surface does not expose thread resolution). Best-effort: returns undefined
+   * on any error so it never blocks the report.
+   */
+  getUnresolvedThreadCount(repo: string, prNumber: number): number | undefined {
+    const [owner, name] = repo.split('/');
+    if (!owner || !name) return undefined;
+    try {
+      const output = runGH([
+        'api',
+        'graphql',
+        '-f',
+        `owner=${owner}`,
+        '-f',
+        `name=${name}`,
+        '-F',
+        `number=${prNumber}`,
+        '-f',
+        'query=query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100){nodes{isResolved}}}}}',
+      ]);
+      const data = JSON.parse(output);
+      const nodes: Array<{ isResolved: boolean }> =
+        data?.data?.repository?.pullRequest?.reviewThreads?.nodes ?? [];
+      return nodes.filter((n) => !n.isResolved).length;
+    } catch {
+      return undefined;
+    }
   }
 
   async getCollaborators(repo: string): Promise<string[]> {
