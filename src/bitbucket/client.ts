@@ -91,6 +91,10 @@ function extractLinkedPRUrls(text: string): string[] {
   return [...new Set(urls)];
 }
 
+/**
+ * @deprecated Retained for rollback only — no longer used by the active pipeline.
+ * All libraries previously hosted on Bitbucket (omi-russia) have migrated to GitHub under omi-enjoy.
+ */
 export class BitbucketClient {
   private authHeader: string;
 

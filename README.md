@@ -6,7 +6,7 @@
 
 - 🔍 Анализ всех задач в релизе YouTrack
 - 🔗 Обнаружение **missing linked tasks** (subtasks, dependencies, related)
-- 📋 Поиск PR в **GitHub** и **Bitbucket** (22+ репозитория)
+- 📋 Поиск PR в **GitHub** (24 репозитория)
 - ✅ Проверка approvals, commits, CI/CD статусов
 - 🚦 Проверка **Can merge** — запрашивает у GitHub, можно ли смержить PR, и перечисляет причины блокировки
 - 🔧 Детекция изменений в `composer.json` и `parameters.yml`
@@ -18,7 +18,6 @@
 - **Node.js 18+** (для native `fetch()`)
 - **gh CLI** — для работы с GitHub API ([установка](https://cli.github.com/))
 - **YouTrack API token**
-- **Bitbucket API credentials**
 - **GitHub token** (опционально, для rate limits)
 
 ## Установка
@@ -55,17 +54,6 @@ cp .env.example .env
    YOUTRACK_TOKEN=perm-xxxxxx...
    ```
 
-#### Bitbucket Credentials
-
-1. Перейти в Bitbucket: https://bitbucket.org/account/settings/app-passwords/
-2. Нажать **Create app password**
-3. Выбрать права: **Repositories** → Read, **Pull requests** → Read
-4. Скопировать токен и добавить в `.env`:
-   ```
-   BITBUCKET_EMAIL=your-email@example.com
-   BITBUCKET_TOKEN=ATBBxxxxxxxx...
-   ```
-
 #### GitHub Token (опционально)
 
 **Автоматически (через gh CLI):**
@@ -91,11 +79,6 @@ YOUTRACK_TOKEN=perm-your-token-here
 # GitHub Token (опционально, для rate limits)
 # Получить: gh auth token ИЛИ https://github.com/settings/tokens/new
 GITHUB_TOKEN=ghp_your-token-here
-
-# Bitbucket API Credentials
-# Получить: https://bitbucket.org/account/settings/app-passwords/
-BITBUCKET_EMAIL=your-email@example.com
-BITBUCKET_TOKEN=ATBB-your-token-here
 ```
 
 ## Использование
@@ -197,7 +180,7 @@ node dist/index.js ESN-2274 --short --no-comment
 - ✅ **Approvals**: наличие и количество апрувов
 - ✅ **Commits**: количество коммитов (желательно 1)
 - ✅ **CI/CD Checks**: статусы проверок (SUCCESS / FAILURE / PENDING)
-- 🚦 **Can merge**: запрос к GitHub (`mergeable` / `mergeStateStatus`) — можно ли смержить открытый PR. В колонке: `✅` можно, `❌` нельзя, `❓` GitHub ещё считает состояние, `-` неприменимо (Bitbucket или не OPEN PR). При блокировке перечисляются причины: нет апрувов, падающие/идущие CI-проверки, конфликты, отставание от базовой ветки, статус Draft, pre-receive хуки, нерешённые обсуждения (review threads). Проверка выполняется только для GitHub и только для открытых PR
+- 🚦 **Can merge**: запрос к GitHub (`mergeable` / `mergeStateStatus`) — можно ли смержить открытый PR. В колонке: `✅` можно, `❌` нельзя, `❓` GitHub ещё считает состояние, `-` неприменимо (не OPEN PR). При блокировке перечисляются причины: нет апрувов, падающие/идущие CI-проверки, конфликты, отставание от базовой ветки, статус Draft, pre-receive хуки, нерешённые обсуждения (review threads). Проверка выполняется только для открытых PR
 
 ### Специальные файлы
 - ⚠️ **Composer**: изменения в `composer.json` / `composer.lock` → требуется `composer update` после деплоя
@@ -211,13 +194,11 @@ node dist/index.js ESN-2274 --short --no-comment
 
 ## Репозитории
 
-### GitHub
-- `omi-enjoy/es-next`
-- `omi-enjoy/es-application`
+### GitHub (omi-enjoy)
 
-### Bitbucket (omi-russia)
-- `es-pass`, `es-admin-api-client`, `es-pass-api-client`
-- `es-migrations`, `es-auth`, `es-autotester`, `es-autotester-api-client`
+- `es-next`, `es-application`, `es-pass`
+- `es-admin-api-client`, `es-pass-api-client`, `es-migrations`, `es-auth`
+- `es-autotester`, `es-autotester-api-client`
 - `epd-api-client`, `epc-api-client`, `ef-api-client`, `em-api-client`
 - `ed-*` — shared libraries (api-bundle, api-client, codeception-modules, codestyle, doctrine-extension, fixtures, frontend-api-bundle, mq-event, query-dsl, rbac-bundle, validation-bundle)
 
@@ -244,7 +225,7 @@ src/
   youtrack/client.ts        - YouTrack REST API клиент (issue + комментарии)
   youtrack/comment-publisher.ts - публикация отчёта в YouTrack
   github/client.ts          - GitHub API через gh CLI
-  bitbucket/client.ts       - Bitbucket REST API клиент
+  bitbucket/client.ts       - Bitbucket REST API клиент (deprecated, не используется)
   analyzer/
     linked-tasks.ts         - анализатор зависимостей задач
     pr-finder.ts            - поиск PR (с параллелизацией)
@@ -266,12 +247,6 @@ sudo apt install gh
 
 ### YOUTRACK_TOKEN не найден
 Убедитесь, что `.env` файл содержит токен и находится в корне проекта.
-
-### Bitbucket API ошибки
-Проверьте:
-- Email и токен в `.env` корректны
-- Токен имеет права `Repositories: Read` и `Pull requests: Read`
-- Токен не истёк
 
 ### GitHub rate limit
 Добавьте `GITHUB_TOKEN` в `.env` для увеличения лимита запросов.
