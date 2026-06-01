@@ -5,10 +5,33 @@ export const GITHUB_REPOS = [
   'omi-enjoy/es-next',
   'omi-enjoy/es-application',
   'omi-enjoy/es-pass',
+  'omi-enjoy/es-admin-api-client',
+  'omi-enjoy/es-pass-api-client',
+  'omi-enjoy/es-migrations',
+  'omi-enjoy/es-auth',
+  'omi-enjoy/es-autotester',
+  'omi-enjoy/es-autotester-api-client',
+  'omi-enjoy/epd-api-client',
+  'omi-enjoy/epc-api-client',
+  'omi-enjoy/ef-api-client',
+  'omi-enjoy/em-api-client',
+  'omi-enjoy/ed-api-bundle',
+  'omi-enjoy/ed-api-client',
+  'omi-enjoy/ed-codeception-modules',
+  'omi-enjoy/ed-codestyle',
+  'omi-enjoy/ed-doctrine-extension',
+  'omi-enjoy/ed-fixtures',
+  'omi-enjoy/ed-frontend-api-bundle',
+  'omi-enjoy/ed-mq-event',
+  'omi-enjoy/ed-query-dsl',
+  'omi-enjoy/ed-rbac-bundle',
+  'omi-enjoy/ed-validation-bundle',
 ];
 
+/** @deprecated Retained for rollback only — no longer used by the active pipeline (Bitbucket migrated to GitHub under omi-enjoy). */
 export const BITBUCKET_ORG = 'omi-russia';
 
+/** @deprecated Retained for rollback only — no longer used by the active pipeline (Bitbucket migrated to GitHub under omi-enjoy). */
 export const BITBUCKET_REPOS = [
   'es-admin-api-client',
   'es-pass-api-client',
@@ -33,33 +56,34 @@ export const BITBUCKET_REPOS = [
   'ed-validation-bundle',
 ];
 
+/** @deprecated Retained for rollback only — no longer used by the active pipeline (Bitbucket migrated to GitHub under omi-enjoy). */
 export const BITBUCKET_API_URL = 'https://api.bitbucket.org/2.0';
 
 export const REPO_SHORT_NAMES: Record<string, string> = {
   'omi-enjoy/es-next': 'es-next',
   'omi-enjoy/es-application': 'es-application',
-  'es-pass': 'es-pass',
-  'es-admin-api-client': 'es-admin-api-client',
-  'es-pass-api-client': 'es-pass-api-client',
-  'es-migrations': 'es-migrations',
-  'es-auth': 'es-auth',
-  'es-autotester': 'es-autotester',
-  'es-autotester-api-client': 'es-autotester-api-client',
-  'epd-api-client': 'epd-api-client',
-  'epc-api-client': 'epc-api-client',
-  'ef-api-client': 'ef-api-client',
-  'em-api-client': 'em-api-client',
-  'ed-api-bundle': 'ed-api-bundle',
-  'ed-api-client': 'ed-api-client',
-  'ed-codeception-modules': 'ed-codeception-modules',
-  'ed-codestyle': 'ed-codestyle',
-  'ed-doctrine-extension': 'ed-doctrine-extension',
-  'ed-fixtures': 'ed-fixtures',
-  'ed-frontend-api-bundle': 'ed-frontend-api-bundle',
-  'ed-mq-event': 'ed-mq-event',
-  'ed-query-dsl': 'ed-query-dsl',
-  'ed-rbac-bundle': 'ed-rbac-bundle',
-  'ed-validation-bundle': 'ed-validation-bundle',
+  'omi-enjoy/es-pass': 'es-pass',
+  'omi-enjoy/es-admin-api-client': 'es-admin-api-client',
+  'omi-enjoy/es-pass-api-client': 'es-pass-api-client',
+  'omi-enjoy/es-migrations': 'es-migrations',
+  'omi-enjoy/es-auth': 'es-auth',
+  'omi-enjoy/es-autotester': 'es-autotester',
+  'omi-enjoy/es-autotester-api-client': 'es-autotester-api-client',
+  'omi-enjoy/epd-api-client': 'epd-api-client',
+  'omi-enjoy/epc-api-client': 'epc-api-client',
+  'omi-enjoy/ef-api-client': 'ef-api-client',
+  'omi-enjoy/em-api-client': 'em-api-client',
+  'omi-enjoy/ed-api-bundle': 'ed-api-bundle',
+  'omi-enjoy/ed-api-client': 'ed-api-client',
+  'omi-enjoy/ed-codeception-modules': 'ed-codeception-modules',
+  'omi-enjoy/ed-codestyle': 'ed-codestyle',
+  'omi-enjoy/ed-doctrine-extension': 'ed-doctrine-extension',
+  'omi-enjoy/ed-fixtures': 'ed-fixtures',
+  'omi-enjoy/ed-frontend-api-bundle': 'ed-frontend-api-bundle',
+  'omi-enjoy/ed-mq-event': 'ed-mq-event',
+  'omi-enjoy/ed-query-dsl': 'ed-query-dsl',
+  'omi-enjoy/ed-rbac-bundle': 'ed-rbac-bundle',
+  'omi-enjoy/ed-validation-bundle': 'ed-validation-bundle',
 };
 
 /** Composer-related file patterns */
@@ -89,7 +113,10 @@ export const LINK_SEARCH_MAP: Record<string, { search: string; reverseSearch: st
 /** Task types to include when checking linked tasks */
 export const INCLUDED_TASK_TYPES = ['Task', 'Feature', 'Bug'];
 
-/** Load Bitbucket credentials from environment variables */
+/**
+ * @deprecated Retained for rollback only — no longer used by the active pipeline (Bitbucket migrated to GitHub under omi-enjoy).
+ * Load Bitbucket credentials from environment variables.
+ */
 export function loadBitbucketCredentials(): { email: string; token: string } {
   const email = process.env.BITBUCKET_EMAIL ?? '';
   const token = process.env.BITBUCKET_TOKEN ?? '';
