@@ -1,21 +1,17 @@
 import { PullRequest, SearchError } from '../types.js';
 import { GitHubClient } from '../github/client.js';
-import { BitbucketClient } from '../bitbucket/client.js';
-import { GITHUB_REPOS, BITBUCKET_REPOS } from '../config.js';
-
-/** Max concurrent Bitbucket API requests */
-const BB_CONCURRENCY = 5;
+import { GITHUB_REPOS } from '../config.js';
 
 /** Parsed linked PR reference from description/comments */
 interface LinkedPRRef {
-  platform: 'github' | 'bitbucket';
+  platform: 'github';
   owner: string;
   repo: string;
   number: number;
   url: string;
 }
 
-/** Extract linked PR URLs from text */
+/** Extract linked GitHub PR URLs from text */
 function extractLinkedPRRefs(text: string): LinkedPRRef[] {
   const refs: LinkedPRRef[] = [];
 
@@ -32,67 +28,12 @@ function extractLinkedPRRefs(text: string): LinkedPRRef[] {
     });
   }
 
-  // Bitbucket: https://bitbucket.org/{owner}/{repo}/pull-requests/{number}
-  const bbRegex = /https:\/\/bitbucket\.org\/([^/]+)\/([^/]+)\/pull-requests\/(\d+)/g;
-  while ((match = bbRegex.exec(text)) !== null) {
-    refs.push({
-      platform: 'bitbucket',
-      owner: match[1],
-      repo: match[2],
-      number: parseInt(match[3], 10),
-      url: match[0],
-    });
-  }
-
   return refs;
 }
 
-/** Run async tasks with limited concurrency */
-async function runWithConcurrency<T>(
-  tasks: (() => Promise<T>)[],
-  concurrency: number,
-): Promise<T[]> {
-  const results: T[] = [];
-  let index = 0;
-
-  async function worker(): Promise<void> {
-    while (index < tasks.length) {
-      const currentIndex = index++;
-      results[currentIndex] = await tasks[currentIndex]();
-    }
-  }
-
-  const workers = Array.from({ length: Math.min(concurrency, tasks.length) }, () => worker());
-  await Promise.all(workers);
-  return results;
-}
-
-/** Search a single Bitbucket repo for a task ID, return found PR matches and any error */
-async function searchBBRepo(
-  bitbucket: BitbucketClient,
-  repo: string,
-  taskId: string,
-): Promise<{
-  repo: string;
-  matches: Array<{ repo: string; id: number; title: string; state: string }>;
-  error: string | null;
-}> {
-  try {
-    const matches = await bitbucket.searchPRs(repo, taskId);
-    return { repo, matches: matches.map((m) => ({ repo, ...m })), error: null };
-  } catch (err) {
-    return {
-      repo,
-      matches: [],
-      error: err instanceof Error ? err.message : String(err),
-    };
-  }
-}
-
-/** Find all PRs for a list of task IDs across GitHub and Bitbucket */
+/** Find all PRs for a list of task IDs across GitHub repos */
 export async function findPRsForTasks(
   github: GitHubClient,
-  bitbucket: BitbucketClient,
   taskIds: string[],
 ): Promise<Map<string, { primary: PullRequest[]; linked: PullRequest[]; searchErrors: SearchError[] }>> {
   const results = new Map<
@@ -107,7 +48,7 @@ export async function findPRsForTasks(
     const linkedPrs: PullRequest[] = [];
     const searchErrors: SearchError[] = [];
 
-    // Search GitHub repos (sequential — only 2 repos, gh CLI is fast)
+    // Search GitHub repos (sequential — gh CLI is fast)
     for (const repo of GITHUB_REPOS) {
       try {
         const matches = await github.searchPRs(repo, taskId);
@@ -127,47 +68,6 @@ export async function findPRsForTasks(
       }
     }
 
-    // Search Bitbucket repos — parallel with concurrency limit
-    const bbSearchTasks = BITBUCKET_REPOS.map(
-      (repo) => () => searchBBRepo(bitbucket, repo, taskId),
-    );
-    const bbResults = await runWithConcurrency(bbSearchTasks, BB_CONCURRENCY);
-
-    const bbMatches: Array<{ repo: string; id: number; title: string; state: string }> = [];
-    for (const r of bbResults) {
-      if (r.error) {
-        searchErrors.push({ platform: 'bitbucket', repo: r.repo, message: r.error });
-        process.stderr.write(
-          `    ❌ Bitbucket fetch failed for ${r.repo}/${taskId}: ${r.error}\n`,
-        );
-      }
-      bbMatches.push(...r.matches);
-    }
-
-    // Fetch details for matched BB PRs (also parallel)
-    const bbDetailTasks = bbMatches.map(
-      (match) => async () => {
-        const cacheKey = `bb:${match.repo}:${match.id}`;
-        let pr = prCache.get(cacheKey);
-        if (!pr) {
-          try {
-            pr = await bitbucket.getPRDetails(match.repo, match.id);
-            prCache.set(cacheKey, pr);
-          } catch (err) {
-            process.stderr.write(
-              `    Warning: Could not fetch BB PR ${match.repo}#${match.id}: ${err}\n`,
-            );
-            return null;
-          }
-        }
-        return pr;
-      },
-    );
-    const bbPrs = (await runWithConcurrency(bbDetailTasks, BB_CONCURRENCY)).filter(
-      (pr): pr is PullRequest => pr !== null,
-    );
-    primaryPrs.push(...bbPrs);
-
     // Collect linked PR refs from all primary PRs
     const allLinkedRefs: LinkedPRRef[] = [];
     for (const pr of primaryPrs) {
@@ -184,11 +84,7 @@ export async function findPRsForTasks(
       let linkedPr = prCache.get(refKey);
       if (!linkedPr) {
         try {
-          if (ref.platform === 'github') {
-            linkedPr = await github.getPRDetails(`${ref.owner}/${ref.repo}`, ref.number);
-          } else {
-            linkedPr = await bitbucket.getPRDetails(ref.repo, ref.number);
-          }
+          linkedPr = await github.getPRDetails(`${ref.owner}/${ref.repo}`, ref.number);
           if (linkedPr) {
             linkedPr.isLinked = true;
             prCache.set(refKey, linkedPr);

@@ -23,12 +23,10 @@ loadEnvFile(process.cwd());
 
 import {
   parseIssueId,
-  loadBitbucketCredentials,
 } from './config.js';
 import { GH_MAX_ATTEMPTS } from './github/client.js';
 import { YouTrackClient } from './youtrack/client.js';
 import { GitHubClient } from './github/client.js';
-import { BitbucketClient } from './bitbucket/client.js';
 import { analyzeLinkedTasks } from './analyzer/linked-tasks.js';
 import { findPRsForTasks } from './analyzer/pr-finder.js';
 import { generateReport } from './report/generator.js';
@@ -86,17 +84,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  let bbCredentials: { email: string; token: string };
-  try {
-    bbCredentials = loadBitbucketCredentials();
-  } catch (err) {
-    console.error(`Error loading Bitbucket credentials: ${err}`);
-    process.exit(1);
-  }
-
   const youtrack = new YouTrackClient();
   const github = new GitHubClient();
-  const bitbucket = new BitbucketClient(bbCredentials.email, bbCredentials.token);
 
   // Step 2: Get release issue
   log('📋 Step 1/7: Fetching release issue...');
@@ -159,7 +148,7 @@ async function main(): Promise<void> {
     ...filteredTasks.map((t) => t.id),
     ...missingTaskIds,
   ];
-  const prMap = await findPRsForTasks(github, bitbucket, allSearchTaskIds);
+  const prMap = await findPRsForTasks(github, allSearchTaskIds);
 
   // Build task reports
   log('📊 Step 5/7: Analyzing PRs...');
