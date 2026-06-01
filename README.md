@@ -8,6 +8,7 @@
 - 🔗 Обнаружение **missing linked tasks** (subtasks, dependencies, related)
 - 📋 Поиск PR в **GitHub** и **Bitbucket** (22+ репозитория)
 - ✅ Проверка approvals, commits, CI/CD статусов
+- 🚦 Проверка **Can merge** — запрашивает у GitHub, можно ли смержить PR, и перечисляет причины блокировки
 - 🔧 Детекция изменений в `composer.json` и `parameters.yml`
 - 📊 Генерация подробного отчёта в Markdown с рекомендациями
 - 💬 Автоматическая публикация отчёта в YouTrack как комментарий к релизной задаче (с обновлением при повторном запуске)
@@ -173,7 +174,7 @@ node dist/index.js ESN-2274 --short --no-comment
 Сгенерированный отчёт включает:
 
 1. **Summary** — статистика готовности задач
-2. **PR Overview** — таблица всех PR с ключевыми метриками
+2. **PR Overview** — таблица всех PR с ключевыми метриками (включая колонку **Can merge**); сразу под таблицей перечисляются PR, которые нельзя смержить, с причинами
 3. **Task Details** — детальная информация по каждой задаче
 4. **Missing Linked Tasks Details** — задачи-зависимости, не включённые в релиз
 5. **Warnings** — проблемы (missing approvals, open PRs, failed CI)
@@ -196,6 +197,7 @@ node dist/index.js ESN-2274 --short --no-comment
 - ✅ **Approvals**: наличие и количество апрувов
 - ✅ **Commits**: количество коммитов (желательно 1)
 - ✅ **CI/CD Checks**: статусы проверок (SUCCESS / FAILURE / PENDING)
+- 🚦 **Can merge**: запрос к GitHub (`mergeable` / `mergeStateStatus`) — можно ли смержить открытый PR. В колонке: `✅` можно, `❌` нельзя, `❓` GitHub ещё считает состояние, `-` неприменимо (Bitbucket или не OPEN PR). При блокировке перечисляются причины: нет апрувов, падающие/идущие CI-проверки, конфликты, отставание от базовой ветки, статус Draft, pre-receive хуки, нерешённые обсуждения (review threads). Проверка выполняется только для GitHub и только для открытых PR
 
 ### Специальные файлы
 - ⚠️ **Composer**: изменения в `composer.json` / `composer.lock` → требуется `composer update` после деплоя
