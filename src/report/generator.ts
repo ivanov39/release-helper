@@ -133,6 +133,35 @@ function paramsCell(pr: PullRequest): string {
   return pr.specialFiles.params ? '⚠️' : '-';
 }
 
+function canMergeCell(pr: PullRequest): string {
+  const ms = pr.mergeStatus;
+  if (!ms) return '-';
+  if (ms.canMerge) return '✅';
+  if (ms.mergeStateStatus === 'UNKNOWN') return '❓';
+  return '❌';
+}
+
+/** Collect all PRs (primary + linked) that GitHub reports cannot be merged */
+function collectUnmergeable(
+  taskReports: TaskReport[],
+  missingReports: TaskReport[],
+): Array<{ taskId: string; pr: PullRequest; reasons: string[] }> {
+  const out: Array<{ taskId: string; pr: PullRequest; reasons: string[] }> = [];
+  const seen = new Set<string>();
+
+  for (const report of [...taskReports, ...missingReports]) {
+    for (const pr of [...report.prs, ...report.linkedPrs]) {
+      if (!pr.mergeStatus || pr.mergeStatus.canMerge) continue;
+      const key = `${pr.platform}:${pr.repo}:${pr.number}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ taskId: report.task.id, pr, reasons: pr.mergeStatus.reasons });
+    }
+  }
+
+  return out;
+}
+
 /** Detect deploy notes from PR description */
 function detectDeployNotes(description: string): string[] {
   if (!description) return [];
@@ -297,19 +326,19 @@ export function generateReport(data: ReleaseReport, options: ReportOptions = {})
   // --- PR Overview Table ---
   add('## PR Overview');
   add();
-  add('| Task | Repository | PR | Author | State | Approvals | Commits | Checks | Composer | Inventory |');
-  add('|------|------------|-----|--------|-------|-----------|---------|--------|----------|--------|');
+  add('| Task | Repository | PR | Author | State | Approvals | Commits | Checks | Can merge | Composer | Inventory |');
+  add('|------|------------|-----|--------|-------|-----------|---------|--------|-----------|----------|--------|');
 
   for (const report of taskReports) {
     for (const pr of report.prs) {
       add(
-        `| ${issueLink(report.task.id)} | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateIcon(pr.state)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
+        `| ${issueLink(report.task.id)} | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateIcon(pr.state)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${canMergeCell(pr)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
       );
     }
     // Linked PRs from description
     for (const pr of report.linkedPrs) {
       add(
-        `| └─ linked | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateIcon(pr.state)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
+        `| └─ linked | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateIcon(pr.state)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${canMergeCell(pr)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
       );
     }
     if (report.prs.length === 0) {
@@ -317,9 +346,9 @@ export function generateReport(data: ReleaseReport, options: ReportOptions = {})
         const repos = report.searchErrors!
           .map((e) => `${e.repo} (${e.platform === 'github' ? 'GH' : 'BB'})`)
           .join(', ');
-        add(`| ${issueLink(report.task.id)} | ${repos} | 🌐 PR search failed | - | - | - | - | - | - | - |`);
+        add(`| ${issueLink(report.task.id)} | ${repos} | 🌐 PR search failed | - | - | - | - | - | - | - | - |`);
       } else {
-        add(`| ${issueLink(report.task.id)} | - | ❌ PR not found | - | - | - | - | - | - | - |`);
+        add(`| ${issueLink(report.task.id)} | - | ❌ PR not found | - | - | - | - | - | - | - | - |`);
       }
     }
   }
@@ -330,12 +359,12 @@ export function generateReport(data: ReleaseReport, options: ReportOptions = {})
     const prefix = lt ? `${linkPrefix(lt.linkType)}: ${issueLink(report.task.id)}` : `🔗 ${issueLink(report.task.id)}`;
     for (const pr of report.prs) {
       add(
-        `| ${prefix} | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateIcon(pr.state)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
+        `| ${prefix} | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateIcon(pr.state)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${canMergeCell(pr)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
       );
     }
     for (const pr of report.linkedPrs) {
       add(
-        `| └─ linked | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateIcon(pr.state)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
+        `| └─ linked | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateIcon(pr.state)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${canMergeCell(pr)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
       );
     }
     if (report.prs.length === 0) {
@@ -343,14 +372,27 @@ export function generateReport(data: ReleaseReport, options: ReportOptions = {})
         const repos = report.searchErrors!
           .map((e) => `${e.repo} (${e.platform === 'github' ? 'GH' : 'BB'})`)
           .join(', ');
-        add(`| ${prefix} | ${repos} | 🌐 PR search failed | - | - | - | - | - | - | - |`);
+        add(`| ${prefix} | ${repos} | 🌐 PR search failed | - | - | - | - | - | - | - | - |`);
       }
     }
   }
 
   add();
-  add('**Legend:** BB = Bitbucket, GH = GitHub | Checks: ✅ passed, ❌ failed, ⏳ pending, - none | Composer/Inventory: ⚠️ file changed | 🔗 subtask/dep = missing linked task not in release');
+  add('**Legend:** BB = Bitbucket, GH = GitHub | Checks: ✅ passed, ❌ failed, ⏳ pending, - none | Can merge: ✅ yes, ❌ no, ❓ GitHub still computing, - n/a (BB or not OPEN) | Composer/Inventory: ⚠️ file changed | 🔗 subtask/dep = missing linked task not in release');
   add();
+
+  // --- Cannot-merge reasons (right under the overview table) ---
+  const unmergeable = collectUnmergeable(taskReports, missingLinkedTaskReports);
+  if (unmergeable.length > 0) {
+    add('### ⛔ PRs that cannot be merged');
+    add();
+    for (const u of unmergeable) {
+      const reasons = u.reasons.length > 0 ? u.reasons.join('; ') : 'merge blocked (no specific reason reported)';
+      add(`- **${issueLink(u.taskId)}** · ${repoDisplay(u.pr)} ${prLink(u.pr)} — ${reasons}`);
+    }
+    add();
+  }
+
   add('---');
   add();
 
