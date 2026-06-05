@@ -13,6 +13,7 @@ interface BBPRListItem {
   title: string;
   state: string;
   source: { branch: { name: string } };
+  destination: { branch: { name: string } };
   author: { display_name: string };
   links: { html: { href: string } };
   description: string;
@@ -217,6 +218,7 @@ export class BitbucketClient {
       title: data.title,
       url: data.links.html.href,
       author: data.author.display_name,
+      targetBranch: data.destination?.branch?.name ?? '',
       state: mapBBState(data.state),
       approvals,
       commitCount,

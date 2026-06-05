@@ -26,6 +26,7 @@ interface GHPRDetails {
   body: string;
   state: string;
   url: string;
+  baseRefName: string;
   author: { login: string };
   reviews: Array<{ state: string; author: { login: string } }>;
   commits: Array<unknown>;
@@ -275,7 +276,7 @@ export class GitHubClient {
       '-R',
       repo,
       '--json',
-      'number,title,body,state,url,author,reviews,commits,comments,statusCheckRollup,files',
+      'number,title,body,state,url,baseRefName,author,reviews,commits,comments,statusCheckRollup,files',
     ]);
 
     const data: GHPRDetails = JSON.parse(output);
@@ -332,6 +333,7 @@ export class GitHubClient {
       title: data.title,
       url: data.url,
       author: data.author.login,
+      targetBranch: data.baseRefName ?? '',
       state,
       approvals,
       commitCount: (data.commits ?? []).length,

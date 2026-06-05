@@ -88,6 +88,8 @@ export interface PullRequest {
   title: string;
   url: string;
   author: string;
+  /** Target/base branch the PR merges into (GitHub baseRefName / Bitbucket destination) */
+  targetBranch: string;
   state: PRState;
   approvals: Approval[];
   commitCount: number;

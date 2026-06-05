@@ -38,8 +38,8 @@ function stateIcon(state: PRState): string {
 function approvalText(approvals: Approval[]): string {
   const approved = approvals.filter((a) => a.state === 'APPROVED');
   if (approved.length === 0) return '❌ 0';
-  const names = approved.map((a) => a.name).join(', ');
-  return `✅ ${approved.length} (${names})`;
+  const names = approved.map((a) => a.name).join('<br>');
+  return `✅ ${approved.length}<br>${names}`;
 }
 
 function commitText(count: number): string {
@@ -92,6 +92,11 @@ function repoDisplay(pr: PullRequest): string {
 
 function prLink(pr: PullRequest): string {
   return `[#${pr.number}](${pr.url})`;
+}
+
+/** Task-column cell: task reference plus the PR's target branch on a new line */
+function taskCell(taskRef: string, pr: PullRequest): string {
+  return pr.targetBranch ? `${taskRef}<br>→ \`${pr.targetBranch}\`` : taskRef;
 }
 
 function linkPrefix(linkType: LinkType): string {
@@ -332,13 +337,13 @@ export function generateReport(data: ReleaseReport, options: ReportOptions = {})
   for (const report of taskReports) {
     for (const pr of report.prs) {
       add(
-        `| ${issueLink(report.task.id)} | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateIcon(pr.state)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${canMergeCell(pr)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
+        `| ${taskCell(issueLink(report.task.id), pr)} | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateIcon(pr.state)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${canMergeCell(pr)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
       );
     }
     // Linked PRs from description
     for (const pr of report.linkedPrs) {
       add(
-        `| └─ linked | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateIcon(pr.state)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${canMergeCell(pr)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
+        `| ${taskCell('└─ linked', pr)} | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateIcon(pr.state)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${canMergeCell(pr)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
       );
     }
     if (report.prs.length === 0) {
@@ -359,12 +364,12 @@ export function generateReport(data: ReleaseReport, options: ReportOptions = {})
     const prefix = lt ? `${linkPrefix(lt.linkType)}: ${issueLink(report.task.id)}` : `🔗 ${issueLink(report.task.id)}`;
     for (const pr of report.prs) {
       add(
-        `| ${prefix} | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateIcon(pr.state)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${canMergeCell(pr)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
+        `| ${taskCell(prefix, pr)} | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateIcon(pr.state)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${canMergeCell(pr)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
       );
     }
     for (const pr of report.linkedPrs) {
       add(
-        `| └─ linked | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateIcon(pr.state)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${canMergeCell(pr)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
+        `| ${taskCell('└─ linked', pr)} | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateIcon(pr.state)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${canMergeCell(pr)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
       );
     }
     if (report.prs.length === 0) {
