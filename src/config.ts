@@ -114,6 +114,35 @@ export const LINK_SEARCH_MAP: Record<string, { search: string; reverseSearch: st
 export const INCLUDED_TASK_TYPES = ['Task', 'Feature', 'Bug'];
 
 /**
+ * YouTrack `Status` values meaning the task was dropped. Such tasks bring no
+ * changes into the release and are struck through in the report.
+ */
+export const CANCELLED_STATUSES = ['canceled', 'cancelled'];
+
+/** Whether a YouTrack status marks the task as cancelled */
+export function isCancelledStatus(status: string): boolean {
+  return CANCELLED_STATUSES.includes(status.trim().toLowerCase());
+}
+
+/** Prefix of release branches, e.g. release/3.161.0 */
+export const RELEASE_BRANCH_PREFIX = 'release/';
+
+/** Extract the release version from the release issue summary: "Release 3.161.0" -> "3.161.0" */
+export function parseReleaseVersion(summary: string): string | null {
+  if (!summary) return null;
+  const match = summary.match(/(\d+\.\d+(?:\.\d+)?)/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Branch names to try for a version, most specific first. The bare version is a
+ * legacy naming form still present in older repos (e.g. `6.119.0` without prefix).
+ */
+export function releaseBranchCandidates(version: string): string[] {
+  return [`${RELEASE_BRANCH_PREFIX}${version}`, version];
+}
+
+/**
  * @deprecated Retained for rollback only — no longer used by the active pipeline (Bitbucket migrated to GitHub under omi-enjoy).
  * Load Bitbucket credentials from environment variables.
  */

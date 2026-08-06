@@ -33,6 +33,7 @@ interface GHPRDetails {
   comments: Array<{ body: string }>;
   statusCheckRollup: Array<{ name: string; conclusion: string | null; status: string }> | null;
   files: Array<{ path: string }>;
+  mergeCommit: { oid: string } | null;
 }
 
 const GH_MAX_ATTEMPTS = 3;
@@ -64,6 +65,24 @@ function runGH(args: string[]): string {
   }
   const summary = lastErr instanceof Error ? lastErr.message.split('\n')[0] : String(lastErr);
   throw new Error(`${label} failed after ${GH_MAX_ATTEMPTS} attempts: ${summary}`);
+}
+
+/**
+ * Single-attempt variant of runGH for calls where failure is a legitimate answer
+ * rather than a transient fault — a missing branch or an unknown commit answers
+ * with 404, and retrying it three times only wastes time.
+ */
+function runGHQuiet(args: string[]): string | null {
+  try {
+    return execFileSync('gh', args, {
+      encoding: 'utf-8',
+      timeout: 30000,
+      maxBuffer: 10 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+  } catch {
+    return null;
+  }
 }
 
 function mapGHState(state: string): PRState {
@@ -276,7 +295,7 @@ export class GitHubClient {
       '-R',
       repo,
       '--json',
-      'number,title,body,state,url,baseRefName,author,reviews,commits,comments,statusCheckRollup,files',
+      'number,title,body,state,url,baseRefName,author,reviews,commits,comments,statusCheckRollup,files,mergeCommit',
     ]);
 
     const data: GHPRDetails = JSON.parse(output);
@@ -344,6 +363,7 @@ export class GitHubClient {
       linkedPRUrls: [...new Set(linkedPRUrls)],
       isLinked: false,
       mergeStatus,
+      mergeCommitOid: data.mergeCommit?.oid,
     };
   }
 
@@ -406,6 +426,50 @@ export class GitHubClient {
       return nodes.filter((n) => !n.isResolved).length;
     } catch {
       return undefined;
+    }
+  }
+
+  /**
+   * Return the first candidate branch that exists in the repo, or null when none do.
+   * Branch names contain slashes, so they must be URL-encoded into the API path.
+   */
+  findExistingBranch(repo: string, candidates: string[]): string | null {
+    for (const branch of candidates) {
+      const output = runGHQuiet(['api', `repos/${repo}/branches/${encodeURIComponent(branch)}`]);
+      if (output !== null) return branch;
+    }
+    return null;
+  }
+
+  /** Repository default branch, falling back to master when the lookup fails */
+  getDefaultBranch(repo: string): string {
+    const output = runGHQuiet(['api', `repos/${repo}`, '--jq', '.default_branch']);
+    const branch = output?.trim();
+    return branch ? branch : 'master';
+  }
+
+  /**
+   * Whether a commit is contained in a branch, via the GitHub compare API.
+   * `compare/BASE...SHA` reports SHA's position relative to BASE: `identical` and
+   * `behind` mean SHA is already an ancestor of BASE, `ahead` and `diverged` mean
+   * it is not.
+   */
+  isCommitInBranch(repo: string, branch: string, sha: string): 'yes' | 'no' | 'unknown' {
+    const output = runGHQuiet([
+      'api',
+      `repos/${repo}/compare/${encodeURIComponent(branch)}...${sha}`,
+      '--jq',
+      '.status',
+    ]);
+    switch (output?.trim()) {
+      case 'identical':
+      case 'behind':
+        return 'yes';
+      case 'ahead':
+      case 'diverged':
+        return 'no';
+      default:
+        return 'unknown';
     }
   }
 

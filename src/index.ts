@@ -23,12 +23,15 @@ loadEnvFile(process.cwd());
 
 import {
   parseIssueId,
+  parseReleaseVersion,
+  RELEASE_BRANCH_PREFIX,
 } from './config.js';
 import { GH_MAX_ATTEMPTS } from './github/client.js';
 import { YouTrackClient } from './youtrack/client.js';
 import { GitHubClient } from './github/client.js';
 import { analyzeLinkedTasks } from './analyzer/linked-tasks.js';
 import { findPRsForTasks } from './analyzer/pr-finder.js';
+import { checkReleaseBranch } from './analyzer/release-branch.js';
 import { generateReport } from './report/generator.js';
 import { publishReportComment } from './youtrack/comment-publisher.js';
 import {
@@ -37,7 +40,34 @@ import {
   TaskReport,
   Warning,
   ReleaseReport,
+  ReleaseBranchInfo,
 } from './types.js';
+
+/**
+ * Extract `--branch=<name>` / `--branch <name>` and return the remaining args.
+ * The value must be removed before the positional issue ID is looked up, since a
+ * branch name does not start with `--` and would otherwise be taken for the ID.
+ */
+function extractBranchFlag(args: string[]): { branch?: string; rest: string[] } {
+  const rest: string[] = [];
+  let branch: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg.startsWith('--branch=')) {
+      branch = arg.slice('--branch='.length);
+      continue;
+    }
+    if (arg === '--branch') {
+      branch = args[i + 1];
+      i++; // consume the value
+      continue;
+    }
+    rest.push(arg);
+  }
+
+  return { branch, rest };
+}
 
 function log(msg: string): void {
   process.stderr.write(msg + '\n');
@@ -45,24 +75,29 @@ function log(msg: string): void {
 
 async function main(): Promise<void> {
   // Step 1: Parse input
-  const args = process.argv.slice(2);
+  const { branch: branchOverride, rest: args } = extractBranchFlag(process.argv.slice(2));
   const isShort = args.includes('--short');
   const isOverview = args.includes('--overview');
   const noComment = args.includes('--no-comment');
   const input = args.find((a) => !a.startsWith('--'));
 
   if (!input) {
-    console.error('Usage: release-helper <issue-id-or-url> [--short] [--overview] [--no-comment]');
+    console.error(
+      'Usage: release-helper <issue-id-or-url> [--short] [--overview] [--no-comment] [--branch=<name>]',
+    );
     console.error('');
     console.error('Options:');
-    console.error('  --short       Hide Task Details section from the report');
-    console.error('  --overview    Show only report header and PR Overview table');
-    console.error('  --no-comment  Skip publishing report as YouTrack comment');
+    console.error('  --short          Hide Task Details section from the report');
+    console.error('  --overview       Show only report header and PR Overview table');
+    console.error('  --no-comment     Skip publishing report as YouTrack comment');
+    console.error('  --branch=<name>  Release branch to check against (default: parsed from');
+    console.error('                   the release summary, e.g. "Release 3.161.0")');
     console.error('');
     console.error('Examples:');
     console.error('  release-helper ESN-2274');
     console.error('  release-helper ESN-2274 --short');
     console.error('  release-helper ESN-2274 --overview');
+    console.error('  release-helper ESN-2274 --branch=release/3.161.1');
     console.error('  release-helper https://tm.ertdev.com/issue/ESN-2274 --short');
     process.exit(1);
   }
@@ -88,7 +123,7 @@ async function main(): Promise<void> {
   const github = new GitHubClient();
 
   // Step 2: Get release issue
-  log('📋 Step 1/7: Fetching release issue...');
+  log('📋 Step 1/8: Fetching release issue...');
   let release: ReleaseIssue;
   try {
     release = await youtrack.getReleaseIssue(issueId);
@@ -100,7 +135,7 @@ async function main(): Promise<void> {
   log(`   Release: ${release.summary}`);
 
   // Step 3: Get linked tasks
-  log('🔗 Step 2/7: Searching linked tasks...');
+  log('🔗 Step 2/8: Searching linked tasks...');
   let linkedIssues: TaskIssue[];
   try {
     linkedIssues = await youtrack.searchIssues(`links: ${issueId}`);
@@ -137,12 +172,12 @@ async function main(): Promise<void> {
   log(`   Found ${filteredTasks.length} tasks in release`);
 
   // Step 3.5: Check task dependencies
-  log('🔍 Step 3/7: Analyzing task dependencies...');
+  log('🔍 Step 3/8: Analyzing task dependencies...');
   const missingLinkedTasks = await analyzeLinkedTasks(youtrack, filteredTasks);
   log(`   Found ${missingLinkedTasks.length} missing linked tasks`);
 
   // Step 4-6: Find PRs for all tasks
-  log('🔎 Step 4/7: Searching PRs...');
+  log('🔎 Step 4/8: Searching PRs...');
   const missingTaskIds = [...new Set(missingLinkedTasks.map((t) => t.linkedTaskId))];
   const allSearchTaskIds = [
     ...filteredTasks.map((t) => t.id),
@@ -151,7 +186,7 @@ async function main(): Promise<void> {
   const prMap = await findPRsForTasks(github, allSearchTaskIds);
 
   // Build task reports
-  log('📊 Step 5/7: Analyzing PRs...');
+  log('📊 Step 5/8: Analyzing PRs...');
   const taskReports: TaskReport[] = [];
   const warnings: Warning[] = [];
 
@@ -228,6 +263,46 @@ async function main(): Promise<void> {
     }
   }
 
+  // Step 6: Verify release tasks actually landed in the release branch
+  log('🌿 Step 6/8: Checking release branch...');
+  let releaseBranchInfo: ReleaseBranchInfo | undefined;
+  const releaseVersion = parseReleaseVersion(release.summary);
+
+  if (branchOverride) {
+    releaseBranchInfo = {
+      version: releaseVersion ?? branchOverride,
+      branch: branchOverride,
+      source: 'flag',
+    };
+  } else if (releaseVersion) {
+    releaseBranchInfo = {
+      version: releaseVersion,
+      branch: `${RELEASE_BRANCH_PREFIX}${releaseVersion}`,
+      source: 'summary',
+    };
+  }
+
+  if (releaseBranchInfo) {
+    log(`   Release branch: ${releaseBranchInfo.branch}`);
+    await checkReleaseBranch(github, taskReports, releaseBranchInfo.version, branchOverride);
+
+    for (const report of taskReports) {
+      for (const pr of report.prs) {
+        const rb = pr.releaseBranch;
+        if (!rb || rb.state === 'IN_RELEASE') continue;
+        warnings.push({
+          type: 'not_in_release_branch',
+          taskId: report.task.id,
+          message: `PR #${pr.number} in ${pr.repoShortName} — ${rb.reason}`,
+        });
+      }
+      // Tasks without PRs are surfaced by the report's release banner; they already
+      // carry a "No PR found" warning, so no second warning is emitted here.
+    }
+  } else {
+    log(`   Warning: could not parse a version from "${release.summary}" — check skipped`);
+  }
+
   // Build missing linked task reports
   const missingLinkedTaskReports: TaskReport[] = [];
   for (const missing of missingLinkedTasks) {
@@ -284,8 +359,8 @@ async function main(): Promise<void> {
     });
   }
 
-  // Step 8: Generate report
-  log('📝 Step 6/7: Generating report...');
+  // Step 7: Generate report
+  log('📝 Step 7/8: Generating report...');
   const checkedAt = new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC');
 
   const reportData: ReleaseReport = {
@@ -295,6 +370,7 @@ async function main(): Promise<void> {
     missingLinkedTaskReports,
     warnings,
     checkedAt,
+    releaseBranchInfo,
   };
 
   const reportContent = generateReport(reportData, { short: isShort, overview: isOverview });
@@ -321,9 +397,9 @@ async function main(): Promise<void> {
 
   // Step 7: Publish report to YouTrack
   if (noComment) {
-    log('\n⏭️  Step 7/7: Skipping YouTrack comment (--no-comment)');
+    log('\n⏭️  Step 8/8: Skipping YouTrack comment (--no-comment)');
   } else {
-    log('\n💬 Step 7/7: Publishing report to YouTrack...');
+    log('\n💬 Step 8/8: Publishing report to YouTrack...');
     try {
       await publishReportComment(youtrack, issueId, reportData);
     } catch (err) {

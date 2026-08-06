@@ -10,6 +10,7 @@ export interface TaskIssue {
   id: string;
   summary: string;
   type: string;
+  /** YouTrack `Status` field: "In Work", "Ready to release", "Canceled", ... */
   state: string;
   linkedIssueCounts: Record<string, number>;
 }
@@ -80,6 +81,20 @@ export interface MergeStatus {
   unresolvedThreads?: number;
 }
 
+/** Whether a PR's changes actually landed in the release branch */
+export type ReleaseBranchState = 'IN_RELEASE' | 'NOT_IN_RELEASE' | 'NOT_MERGED' | 'UNKNOWN';
+
+/** Result of checking one PR against the release branch of its repository */
+export interface ReleaseBranchCheck {
+  /** Branch the PR was compared against */
+  branch: string;
+  /** false when the repo has no release/<version> branch and its default branch was used */
+  isReleaseBranch: boolean;
+  state: ReleaseBranchState;
+  /** Human-readable explanation rendered in the report */
+  reason: string;
+}
+
 export interface PullRequest {
   platform: Platform;
   repo: string;
@@ -101,6 +116,10 @@ export interface PullRequest {
   isLinked: boolean;
   /** GitHub merge readiness; undefined for non-OPEN PRs and Bitbucket (not queried) */
   mergeStatus?: MergeStatus;
+  /** Commit the PR landed on its target branch; undefined until the PR is merged */
+  mergeCommitOid?: string;
+  /** Release-branch containment; undefined when the PR was not checked */
+  releaseBranch?: ReleaseBranchCheck;
 }
 
 export interface SearchError {
@@ -117,9 +136,24 @@ export interface TaskReport {
 }
 
 export interface Warning {
-  type: 'missing_linked' | 'pr_issue' | 'composer' | 'params' | 'search_failed';
+  type:
+    | 'missing_linked'
+    | 'pr_issue'
+    | 'composer'
+    | 'params'
+    | 'search_failed'
+    | 'not_in_release_branch';
   taskId: string;
   message: string;
+}
+
+/** The release branch the report was checked against */
+export interface ReleaseBranchInfo {
+  /** Version parsed from the release summary, e.g. "3.161.0" */
+  version: string;
+  /** Canonical branch name, e.g. "release/3.161.0" */
+  branch: string;
+  source: 'summary' | 'flag';
 }
 
 export interface ReleaseReport {
@@ -129,6 +163,8 @@ export interface ReleaseReport {
   missingLinkedTaskReports: TaskReport[];
   warnings: Warning[];
   checkedAt: string;
+  /** undefined when the release branch could not be determined and the check was skipped */
+  releaseBranchInfo?: ReleaseBranchInfo;
 }
 
 export interface ReportOptions {

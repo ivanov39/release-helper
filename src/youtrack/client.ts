@@ -100,6 +100,15 @@ export class YouTrackClient {
     return field?.value?.name ?? '';
   }
 
+  /**
+   * Issue status ("In Work", "Canceled", ...). The ES and ESN projects name this
+   * field `Status`; `State` is YouTrack's own default name and is kept as a
+   * fallback so the client keeps working against differently configured projects.
+   */
+  private getStatusValue(fields: YTCustomField[]): string {
+    return this.getCustomFieldValue(fields, 'Status') || this.getCustomFieldValue(fields, 'State');
+  }
+
   private buildLinkedIssueCounts(links: YTLink[]): Record<string, number> {
     const counts: Record<string, number> = {};
     for (const link of links) {
@@ -135,7 +144,7 @@ export class YouTrackClient {
       id: data.idReadable,
       summary: data.summary,
       type: this.getCustomFieldValue(data.customFields, 'Type'),
-      state: this.getCustomFieldValue(data.customFields, 'State'),
+      state: this.getStatusValue(data.customFields),
       linkedIssueCounts: this.buildLinkedIssueCounts(data.links ?? []),
     };
   }
@@ -195,7 +204,7 @@ export class YouTrackClient {
       id: item.idReadable,
       summary: item.summary,
       type: this.getCustomFieldValue(item.customFields, 'Type'),
-      state: this.getCustomFieldValue(item.customFields, 'State'),
+      state: this.getStatusValue(item.customFields),
       linkedIssueCounts: {},
     }));
   }
