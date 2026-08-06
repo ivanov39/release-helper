@@ -226,11 +226,19 @@ interface NotInRelease {
  * Collect release tasks whose changes are not (provably) in the release branch.
  * Only the release's own tasks are considered — PRs of missing linked tasks belong
  * to other product releases and are reported as a separate class of problem.
+ * Cancelled tasks are skipped: their changes are not meant to ship, so their
+ * absence from the release branch is the expected outcome, not a finding.
  */
-function collectNotInRelease(taskReports: TaskReport[], releaseBranch: string): NotInRelease[] {
+function collectNotInRelease(
+  taskReports: TaskReport[],
+  releaseBranch: string,
+  statuses: StatusMap,
+): NotInRelease[] {
   const out: NotInRelease[] = [];
 
   for (const report of taskReports) {
+    if (cancelledStatus(report.task.id, statuses)) continue;
+
     if (report.prs.length === 0) {
       if ((report.searchErrors?.length ?? 0) > 0) {
         out.push({
@@ -316,7 +324,9 @@ function addReleaseBanner(
     return;
   }
 
-  const total = taskReports.length;
+  // Cancelled tasks are not expected in the release branch and are left out of
+  // the verdict's denominator.
+  const total = taskReports.filter((r) => !cancelledStatus(r.task.id, statuses)).length;
   const fallbackRepos = collectFallbackRepos(taskReports);
   const checkedRepos = new Set(
     taskReports.flatMap((r) => r.prs.filter((pr) => pr.releaseBranch).map((pr) => pr.repoShortName)),
@@ -372,15 +382,20 @@ function addReleaseBanner(
   add();
 }
 
-/** Collect all PRs (primary + linked) that GitHub reports cannot be merged */
+/**
+ * Collect all PRs (primary + linked) that GitHub reports cannot be merged.
+ * PRs of cancelled tasks are skipped — nobody is going to merge them.
+ */
 function collectUnmergeable(
   taskReports: TaskReport[],
   missingReports: TaskReport[],
+  statuses: StatusMap,
 ): Array<{ taskId: string; pr: PullRequest; reasons: string[] }> {
   const out: Array<{ taskId: string; pr: PullRequest; reasons: string[] }> = [];
   const seen = new Set<string>();
 
   for (const report of [...taskReports, ...missingReports]) {
+    if (cancelledStatus(report.task.id, statuses)) continue;
     for (const pr of [...report.prs, ...report.linkedPrs]) {
       if (!pr.mergeStatus || pr.mergeStatus.canMerge) continue;
       const key = `${pr.platform}:${pr.repo}:${pr.number}`;
@@ -437,17 +452,36 @@ function isTaskReady(report: TaskReport): boolean {
   return true;
 }
 
-/** Count summary statuses */
+/**
+ * Count summary statuses.
+ *
+ * Cancelled tasks are counted on their own line and excluded from every other
+ * bucket: a dropped task with no PR is not a "PR not found" problem, and one
+ * with an unapproved PR is not an issue to chase.
+ */
 function countStatuses(
   taskReports: TaskReport[],
-  missingCount: number,
-): { ready: number; issues: number; noPR: number; searchFailed: number; missingLinked: number } {
+  missingLinkedTasks: LinkedTask[],
+  statuses: StatusMap,
+): {
+  ready: number;
+  issues: number;
+  noPR: number;
+  searchFailed: number;
+  missingLinked: number;
+  cancelled: number;
+} {
   let ready = 0;
   let issues = 0;
   let noPR = 0;
   let searchFailed = 0;
+  let cancelled = 0;
 
   for (const report of taskReports) {
+    if (cancelledStatus(report.task.id, statuses)) {
+      cancelled++;
+      continue;
+    }
     if ((report.searchErrors?.length ?? 0) > 0) {
       searchFailed++;
     }
@@ -460,10 +494,19 @@ function countStatuses(
     }
   }
 
-  return { ready, issues, noPR, searchFailed, missingLinked: missingCount };
+  let missingLinked = 0;
+  for (const id of new Set(missingLinkedTasks.map((t) => t.linkedTaskId))) {
+    if (cancelledStatus(id, statuses)) {
+      cancelled++;
+    } else {
+      missingLinked++;
+    }
+  }
+
+  return { ready, issues, noPR, searchFailed, missingLinked, cancelled };
 }
 
-/** Suggest deploy order based on repo types */
+/** Suggest deploy order based on repo types. PRs of cancelled tasks are not deployed. */
 function suggestDeployOrder(
   taskReports: TaskReport[],
   missingReports: TaskReport[],
@@ -487,6 +530,7 @@ function suggestDeployOrder(
   // Collect unique repo PRs
   const repoSteps = new Map<string, { order: number; prs: string[] }>();
   for (const report of allReports) {
+    if (cancelledStatus(report.task.id, statuses)) continue;
     for (const pr of [...report.prs, ...report.linkedPrs]) {
       const repo = pr.repoShortName;
       const order = repoOrder[repo] ?? 4;
@@ -550,15 +594,18 @@ export function generateReport(data: ReleaseReport, options: ReportOptions = {})
   } else {
     add('**Release branch:** не определена — проверка вхождения в релиз не выполнялась');
   }
-  const missingUniqueCount = new Set(missingLinkedTasks.map((t) => t.linkedTaskId)).size;
-  add(`**Total tasks:** ${taskReports.length} (+ ${missingUniqueCount} missing linked tasks detected)`);
+  const counts = countStatuses(taskReports, missingLinkedTasks, statuses);
+  const cancelledNote = counts.cancelled > 0 ? `, ${counts.cancelled} cancelled` : '';
+  add(
+    `**Total tasks:** ${taskReports.length} (+ ${counts.missingLinked} missing linked tasks detected${cancelledNote})`,
+  );
   add();
 
   // --- Release-branch banner ---
   // Rendered in every mode, --short included: the YouTrack comment is published
   // with { short: true } and this is the verdict the release manager must see.
   const notInRelease = releaseBranchInfo
-    ? collectNotInRelease(taskReports, releaseBranchInfo.branch)
+    ? collectNotInRelease(taskReports, releaseBranchInfo.branch, statuses)
     : [];
   addReleaseBanner(add, releaseBranchInfo, taskReports, notInRelease, statuses);
 
@@ -567,7 +614,6 @@ export function generateReport(data: ReleaseReport, options: ReportOptions = {})
 
   // --- Summary ---
   if (!isOverview) {
-    const counts = countStatuses(taskReports, missingUniqueCount);
     add('## Summary');
     add();
     add('| Status | Count |');
@@ -577,11 +623,18 @@ export function generateReport(data: ReleaseReport, options: ReportOptions = {})
     add(`| ❌ PR not found | ${counts.noPR} |`);
     add(`| 🌐 Search failed | ${counts.searchFailed} |`);
     add(`| 🔗 Missing linked tasks | ${counts.missingLinked} |`);
+    add(`| 🚫 Cancelled | ${counts.cancelled} |`);
     if (releaseBranchInfo) {
       add(`| ✅ In release branch | ${countTasksInRelease(taskReports)} |`);
       add(`| 🚨 Not in release branch | ${new Set(notInRelease.map((n) => n.taskId)).size} |`);
     }
     add();
+    if (counts.cancelled > 0) {
+      add(
+        '🚫 Отменённые в YouTrack задачи показаны зачёркнутыми и исключены из остальных счётчиков, проверок и рекомендаций — действий по ним не требуется.',
+      );
+      add();
+    }
     add('---');
     add();
   }
@@ -656,7 +709,7 @@ export function generateReport(data: ReleaseReport, options: ReportOptions = {})
   }
 
   // --- Cannot-merge reasons (right under the overview table) ---
-  const unmergeable = collectUnmergeable(taskReports, missingLinkedTaskReports);
+  const unmergeable = collectUnmergeable(taskReports, missingLinkedTaskReports, statuses);
   if (unmergeable.length > 0) {
     add('### ⛔ PRs that cannot be merged');
     add();
@@ -891,15 +944,18 @@ export function generateReport(data: ReleaseReport, options: ReportOptions = {})
     add('## Recommendations');
     add();
 
-    if (missingLinkedTasks.length > 0) {
+    // Cancelled tasks are never recommended for inclusion — they were dropped
+    // on purpose, and "include it in the release" would be the wrong advice.
+    const uniqueMissing = new Map<string, LinkedTask>();
+    for (const lt of missingLinkedTasks) {
+      if (cancelledStatus(lt.linkedTaskId, statuses)) continue;
+      if (!uniqueMissing.has(lt.linkedTaskId)) {
+        uniqueMissing.set(lt.linkedTaskId, lt);
+      }
+    }
+    if (uniqueMissing.size > 0) {
       add('### For Missing Linked Tasks');
       let recNum = 1;
-      const uniqueMissing = new Map<string, LinkedTask>();
-      for (const lt of missingLinkedTasks) {
-        if (!uniqueMissing.has(lt.linkedTaskId)) {
-          uniqueMissing.set(lt.linkedTaskId, lt);
-        }
-      }
       for (const [, lt] of uniqueMissing) {
         add(`${recNum}. **Include ${taskRef(lt.linkedTaskId, statuses)} in release** — ${lt.linkType} ${taskRef(lt.parentTaskId, statuses)}. ${linkifyText(lt.linkedTaskSummary, statuses)}`);
         recNum++;

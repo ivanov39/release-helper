@@ -24,6 +24,7 @@ loadEnvFile(process.cwd());
 import {
   parseIssueId,
   parseReleaseVersion,
+  isCancelledStatus,
   RELEASE_BRANCH_PREFIX,
 } from './config.js';
 import { GH_MAX_ATTEMPTS } from './github/client.js';
@@ -200,6 +201,10 @@ async function main(): Promise<void> {
     };
     taskReports.push(report);
 
+    // A cancelled task ships nothing: its PRs will not be merged and its missing
+    // PR is not a gap. It stays in the report (struck through) but raises nothing.
+    if (isCancelledStatus(task.state)) continue;
+
     for (const err of prData.searchErrors) {
       warnings.push({
         type: 'search_failed',
@@ -287,6 +292,7 @@ async function main(): Promise<void> {
     await checkReleaseBranch(github, taskReports, releaseBranchInfo.version, branchOverride);
 
     for (const report of taskReports) {
+      if (isCancelledStatus(report.task.state)) continue;
       for (const pr of report.prs) {
         const rb = pr.releaseBranch;
         if (!rb || rb.state === 'IN_RELEASE') continue;
@@ -330,6 +336,8 @@ async function main(): Promise<void> {
       searchErrors: prData.searchErrors.length > 0 ? prData.searchErrors : undefined,
     });
 
+    if (isCancelledStatus(missingTask.state)) continue;
+
     for (const err of prData.searchErrors) {
       warnings.push({
         type: 'search_failed',
@@ -350,8 +358,12 @@ async function main(): Promise<void> {
     }
   }
 
-  // Missing linked task warnings
+  // Missing linked task warnings. A cancelled linked task is absent from the
+  // release because it was dropped — that is not a gap to report.
+  const missingTaskStates = new Map(missingLinkedTaskReports.map((r) => [r.task.id, r.task.state]));
   for (const missing of missingLinkedTasks) {
+    const state = missingTaskStates.get(missing.linkedTaskId) ?? missing.linkedTaskState;
+    if (isCancelledStatus(state)) continue;
     warnings.push({
       type: 'missing_linked',
       taskId: missing.parentTaskId,
