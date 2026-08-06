@@ -205,12 +205,17 @@ function canMergeCell(pr: PullRequest): string {
   return '❌';
 }
 
-function inReleaseCell(pr: PullRequest): string {
+/**
+ * State column: the PR's own state plus, on a second line, whether its changes
+ * are in the release branch. Nothing is appended when the check did not run.
+ */
+function stateCell(pr: PullRequest): string {
+  const state = stateIcon(pr.state);
   const rb = pr.releaseBranch;
-  if (!rb) return '-';
-  if (rb.state === 'IN_RELEASE') return '✅';
-  if (rb.state === 'UNKNOWN') return '❓';
-  return '🚨';
+  if (!rb) return state;
+  if (rb.state === 'IN_RELEASE') return `${state}<br>✅ In release`;
+  if (rb.state === 'UNKNOWN') return `${state}<br>❓ In release?`;
+  return `${state}<br>🚨 Not in release`;
 }
 
 /** One release task that did not make it into the release branch */
@@ -642,19 +647,19 @@ export function generateReport(data: ReleaseReport, options: ReportOptions = {})
   // --- PR Overview Table ---
   add('## PR Overview');
   add();
-  add('| Task | Repository | PR | Author | State | Approvals | Commits | Checks | Can merge | In release | Composer | Inventory |');
-  add('|------|------------|-----|--------|-------|-----------|---------|--------|-----------|------------|----------|--------|');
+  add('| Task | Repository | PR | Author | State | Approvals | Commits | Checks | Can merge | Composer | Inventory |');
+  add('|------|------------|-----|--------|-------|-----------|---------|--------|-----------|----------|--------|');
 
   for (const report of taskReports) {
     for (const pr of report.prs) {
       add(
-        `| ${taskCell(taskRef(report.task.id, statuses), pr)} | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateIcon(pr.state)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${canMergeCell(pr)} | ${inReleaseCell(pr)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
+        `| ${taskCell(taskRef(report.task.id, statuses), pr)} | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateCell(pr)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${canMergeCell(pr)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
       );
     }
     // Linked PRs from description
     for (const pr of report.linkedPrs) {
       add(
-        `| ${taskCell('└─ linked', pr)} | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateIcon(pr.state)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${canMergeCell(pr)} | ${inReleaseCell(pr)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
+        `| ${taskCell('└─ linked', pr)} | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateCell(pr)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${canMergeCell(pr)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
       );
     }
     if (report.prs.length === 0) {
@@ -662,9 +667,9 @@ export function generateReport(data: ReleaseReport, options: ReportOptions = {})
         const repos = report.searchErrors!
           .map((e) => `${e.repo} (${e.platform === 'github' ? 'GH' : 'BB'})`)
           .join(', ');
-        add(`| ${taskRef(report.task.id, statuses)} | ${repos} | 🌐 PR search failed | - | - | - | - | - | - | - | - | - |`);
+        add(`| ${taskRef(report.task.id, statuses)} | ${repos} | 🌐 PR search failed | - | - | - | - | - | - | - | - |`);
       } else {
-        add(`| ${taskRef(report.task.id, statuses)} | - | ❌ PR not found | - | - | - | - | - | - | - | - | - |`);
+        add(`| ${taskRef(report.task.id, statuses)} | - | ❌ PR not found | - | - | - | - | - | - | - | - |`);
       }
     }
   }
@@ -676,12 +681,12 @@ export function generateReport(data: ReleaseReport, options: ReportOptions = {})
     const prefix = lt ? `${linkPrefix(lt.linkType)}: ${ref}` : `🔗 ${ref}`;
     for (const pr of report.prs) {
       add(
-        `| ${taskCell(prefix, pr)} | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateIcon(pr.state)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${canMergeCell(pr)} | ${inReleaseCell(pr)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
+        `| ${taskCell(prefix, pr)} | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateCell(pr)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${canMergeCell(pr)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
       );
     }
     for (const pr of report.linkedPrs) {
       add(
-        `| ${taskCell('└─ linked', pr)} | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateIcon(pr.state)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${canMergeCell(pr)} | ${inReleaseCell(pr)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
+        `| ${taskCell('└─ linked', pr)} | ${repoDisplay(pr)} | ${prLink(pr)} | ${pr.author} | ${stateCell(pr)} | ${approvalText(pr.approvals)} | ${commitText(pr.commitCount)} | ${checksText(pr.checks)} | ${canMergeCell(pr)} | ${composerCell(pr)} | ${paramsCell(pr)} |`,
       );
     }
     if (report.prs.length === 0) {
@@ -689,13 +694,13 @@ export function generateReport(data: ReleaseReport, options: ReportOptions = {})
         const repos = report.searchErrors!
           .map((e) => `${e.repo} (${e.platform === 'github' ? 'GH' : 'BB'})`)
           .join(', ');
-        add(`| ${prefix} | ${repos} | 🌐 PR search failed | - | - | - | - | - | - | - | - | - |`);
+        add(`| ${prefix} | ${repos} | 🌐 PR search failed | - | - | - | - | - | - | - | - |`);
       }
     }
   }
 
   add();
-  add('**Legend:** BB = Bitbucket, GH = GitHub | Checks: ✅ passed, ❌ failed, ⏳ pending, - none | Can merge: ✅ yes, ❌ no, ❓ GitHub still computing, - n/a (BB or not OPEN) | In release: ✅ коммит в релизной ветке, 🚨 нет, ❓ не удалось проверить, - не проверялось | Composer/Inventory: ⚠️ file changed | 🔗 subtask/dep = missing linked task not in release | ~~зачёркнутая задача~~ = отменена в YouTrack (статус в скобках)');
+  add('**Legend:** BB = Bitbucket, GH = GitHub | Checks: ✅ passed, ❌ failed, ⏳ pending, - none | Can merge: ✅ yes, ❌ no, ❓ GitHub still computing, - n/a (BB or not OPEN) | State: ✅ In release — коммит в релизной ветке, 🚨 Not in release — нет, ❓ In release? — не удалось проверить, без пометки — не проверялось | Composer/Inventory: ⚠️ file changed | 🔗 subtask/dep = missing linked task not in release | ~~зачёркнутая задача~~ = отменена в YouTrack (статус в скобках)');
   add();
 
   // --- Tasks missing from the release branch (the most critical finding) ---
