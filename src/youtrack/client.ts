@@ -32,14 +32,23 @@ interface YTIssueResponse {
 interface YTComment {
   id: string;
   text: string;
-  author: {
+  author?: {
+    id: string;
     login: string;
     name: string;
-  };
+  } | null;
+}
+
+/** Владелец токена — нужен, чтобы редактировать только свои комментарии. */
+interface YTUser {
+  id: string;
+  login: string;
+  name: string;
 }
 
 export class YouTrackClient {
   private token: string;
+  private currentUser: YTUser | null = null;
 
   constructor() {
     this.token = getYouTrackToken();
@@ -171,15 +180,30 @@ export class YouTrackClient {
     };
   }
 
+  /**
+   * Пользователь, которому принадлежит YOUTRACK_TOKEN. Результат кэшируется:
+   * за один запуск он запрашивается один раз.
+   */
+  async getCurrentUser(): Promise<YTUser> {
+    if (this.currentUser) {
+      return this.currentUser;
+    }
+    const fields = 'id,login,name';
+    this.currentUser = await this.fetchApi<YTUser>(
+      `/users/me?fields=${encodeURIComponent(fields)}`,
+    );
+    return this.currentUser;
+  }
+
   async getIssueComments(issueId: string): Promise<YTComment[]> {
-    const fields = 'id,text,author(login,name)';
+    const fields = 'id,text,author(id,login,name)';
     return this.fetchApi<YTComment[]>(
       `/issues/${encodeURIComponent(issueId)}/comments?fields=${encodeURIComponent(fields)}&$top=-1`,
     );
   }
 
   async addIssueComment(issueId: string, text: string): Promise<YTComment> {
-    const fields = 'id,text,author(login,name)';
+    const fields = 'id,text,author(id,login,name)';
     return this.fetchApi<YTComment>(
       `/issues/${encodeURIComponent(issueId)}/comments?fields=${encodeURIComponent(fields)}`,
       { method: 'POST', body: { text } },
@@ -187,7 +211,7 @@ export class YouTrackClient {
   }
 
   async updateIssueComment(issueId: string, commentId: string, text: string): Promise<YTComment> {
-    const fields = 'id,text,author(login,name)';
+    const fields = 'id,text,author(id,login,name)';
     return this.fetchApi<YTComment>(
       `/issues/${encodeURIComponent(issueId)}/comments/${encodeURIComponent(commentId)}?fields=${encodeURIComponent(fields)}`,
       { method: 'POST', body: { text } },
